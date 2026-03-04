@@ -540,6 +540,38 @@ body {
 }
 
 textarea, input { -webkit-appearance: none; }
+
+/* ============================================================
+   CONTEXT MENU (long-press)
+   ============================================================ */
+.ctx-menu {
+  position: fixed;
+  background: var(--paper);
+  border: 1px solid var(--paper3);
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+  z-index: 500;
+  overflow: hidden;
+  min-width: 160px;
+  animation: ctxIn 0.12s ease;
+}
+@keyframes ctxIn { from { opacity:0; transform:scale(0.92); } to { opacity:1; transform:scale(1); } }
+.ctx-item {
+  padding: 12px 18px;
+  font-size: 14px;
+  color: var(--ink2);
+  cursor: pointer;
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--paper2);
+  font-family: 'Noto Serif SC', serif;
+}
+.ctx-item:last-child { border-bottom: none; }
+.ctx-item:active { background: var(--paper2); }
+.ctx-item.danger { color: var(--red); }
+.ctx-backdrop {
+  position: fixed; inset: 0; z-index: 499;
+}
+
 </style>
 </head>
 <body>
@@ -1034,12 +1066,8 @@ function renderHabits() {
   habits.forEach((h,i)=>{
     const div=document.createElement('div');
     div.className='check-item'+(h.done?' done':'');
-    div.innerHTML=`
-      <div class="check-box" onclick="toggleHabit(${i})">${h.done?'✓':''}</div>
-      <div class="check-text" onclick="toggleHabit(${i})">${h.name}<span class="streak">${h.streak>1?'🔥'+h.streak:''}</span></div>
-      <div class="check-meta">${h.doneAt||''}</div>
-      <span class="check-del" onclick="deleteHabit(${i})">✕</span>
-    `;
+    div.innerHTML=`<div class="check-box" onclick="toggleHabit(${i})">${h.done?'✓':''}</div><div class="check-text" onclick="toggleHabit(${i})">${escHtml(h.name)}<span class="streak">${h.streak>1?'🔥'+h.streak:''}</span></div><div class="check-meta">${h.doneAt||''}</div>`;
+    attachLongPress(div, ()=>showHabitMenu(i));
     el.appendChild(div);
   });
 }
@@ -1101,10 +1129,8 @@ function renderTodos() {
   active.forEach(t=>{
     const div=document.createElement('div');
     div.className='check-item';
-    div.innerHTML=`
-      <div class="check-box" onclick="completeTodo(${t.id})"></div>
-      <div class="check-text" onclick="completeTodo(${t.id})">${t.text}</div>
-    `;
+    div.innerHTML=`<div class="check-box" onclick="completeTodo(${t.id})"></div><div class="check-text">${escHtml(t.text)}</div><div class="check-meta" style="font-size:10px;color:var(--ink4)">长按编辑</div>`;
+    attachLongPress(div, ()=>showTodoMenu(t.id));
     el.appendChild(div);
   });
 }
@@ -1145,10 +1171,8 @@ function renderGoals(tab) {
   goals.filter(g=>!g.done).forEach(g=>{
     const div=document.createElement('div');
     div.className='check-item';
-    div.innerHTML=`
-      <div class="check-box" onclick="completeGoal('${tab}',${g.id})"></div>
-      <div class="check-text" onclick="completeGoal('${tab}',${g.id})">${g.text}</div>
-    `;
+    div.innerHTML=`<div class="check-box" onclick="completeGoal('${tab}',${g.id})"></div><div class="check-text">${escHtml(g.text)}</div><div class="check-meta" style="font-size:10px;color:var(--ink4)">长按编辑</div>`;
+    attachLongPress(div, ()=>showGoalMenu(tab, g.id));
     el.appendChild(div);
   });
 }
@@ -1388,7 +1412,7 @@ function openArc(type) {
     if(!done.length){body.innerHTML='<p style="color:var(--ink4);font-size:12px;padding:8px 0">今日暂无已完成任务</p>';return;}
     done.forEach(t=>{
       const d=document.createElement('div'); d.className='arc-item';
-      d.innerHTML=`<span class="arc-text">${t.text}</span><span class="arc-time">✓ ${t.doneAt}</span>`;
+      d.innerHTML=`<span class="arc-text">${escHtml(t.text)}</span><span class="arc-time">✓ ${t.doneAt}</span><span class="check-del" onclick="deleteArcTodo(${t.id})" style="color:var(--red);font-size:13px;padding:0 4px;cursor:pointer">🗑</span>`;
       body.appendChild(d);
     });
   }
@@ -1417,8 +1441,8 @@ function openArc(type) {
     if(!arc.length){body.innerHTML='<p style="color:var(--ink4);font-size:12px;padding:8px 0">暂无日记</p>';return;}
     arc.slice(0,30).forEach(d=>{
       const el=document.createElement('div'); el.className='arc-item';
-      el.style.flexDirection='column'; el.style.alignItems='flex-start'; el.style.gap='2px';
-      el.innerHTML=`<span style="font-size:10px;color:var(--ink4)">${d.date}</span><span style="font-size:12px;color:var(--ink2)">${d.text}</span>`;
+      el.style.gap='6px';
+      el.innerHTML=`<div style="flex:1"><div style="font-size:10px;color:var(--ink4);margin-bottom:2px">${d.date}</div><div style="font-size:12px;color:var(--ink2)">${escHtml(d.text)}</div></div><span onclick="deleteArcDiary('${d.date}')" style="color:var(--red);font-size:13px;cursor:pointer;flex-shrink:0;padding:2px 4px">🗑</span>`;
       body.appendChild(el);
     });
   }
@@ -1450,8 +1474,9 @@ function openArc(type) {
         const s=document.createElement('div'); s.className='arc-section-title'; s.style.marginTop='8px';
         s.textContent=r.date; body.appendChild(s); lastD=r.date;
       }
+      const recIdx = recs.indexOf(r);
       const d=document.createElement('div'); d.className='arc-item';
-      d.innerHTML=`<span style="color:var(--ink2)">🍅 ${r.name}</span><span class="arc-time">${r.dur} · ${r.end}</span>`;
+      d.innerHTML=`<span style="color:var(--ink2);flex:1">🍅 ${escHtml(r.name)}</span><span class="arc-time">${r.dur} · ${r.end}</span><span onclick="deleteArcPomo(${recIdx})" style="color:var(--red);font-size:13px;cursor:pointer;padding:0 4px">🗑</span>`;
       body.appendChild(d);
     });
   }
@@ -1486,6 +1511,209 @@ function openArc(type) {
 /* ============================================================
    INIT
    ============================================================ */
+
+/* ============================================================
+   LONG PRESS
+   ============================================================ */
+function attachLongPress(el, cb) {
+  let timer, moved = false;
+  const start = e => { moved=false; timer = setTimeout(()=>{ if(!moved){ navigator.vibrate&&navigator.vibrate(30); cb(); } }, 500); };
+  const cancel = () => clearTimeout(timer);
+  const move = () => { moved=true; clearTimeout(timer); };
+  el.addEventListener('touchstart', start, {passive:true});
+  el.addEventListener('touchend', cancel);
+  el.addEventListener('touchmove', move, {passive:true});
+  el.addEventListener('mousedown', start);
+  el.addEventListener('mouseup', cancel);
+  el.addEventListener('mousemove', move);
+  el.addEventListener('contextmenu', e=>{ e.preventDefault(); cb(); });
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let _ctxBackdrop = null;
+
+function showCtxMenu(x, y, items) {
+  closeCtxMenu();
+  // backdrop
+  const bd = document.createElement('div');
+  bd.className = 'ctx-backdrop';
+  bd.onclick = closeCtxMenu;
+  document.body.appendChild(bd);
+  _ctxBackdrop = bd;
+  // menu
+  const menu = document.createElement('div');
+  menu.className = 'ctx-menu';
+  menu.id = 'ctxMenu';
+  items.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'ctx-item' + (item.danger ? ' danger' : '');
+    div.innerHTML = `<span>${item.icon}</span><span>${item.label}</span>`;
+    div.onclick = () => { closeCtxMenu(); item.action(); };
+    menu.appendChild(div);
+  });
+  document.body.appendChild(menu);
+  // position
+  const mw = 180, mh = items.length * 48;
+  const lx = Math.min(x, window.innerWidth - mw - 10);
+  const ly = Math.min(y, window.innerHeight - mh - 10);
+  menu.style.left = Math.max(10, lx) + 'px';
+  menu.style.top = Math.max(10, ly) + 'px';
+}
+
+function closeCtxMenu() {
+  const m = document.getElementById('ctxMenu');
+  if (m) m.remove();
+  if (_ctxBackdrop) { _ctxBackdrop.remove(); _ctxBackdrop = null; }
+}
+
+/* ── TODO menu ── */
+function showTodoMenu(id) {
+  const todos = DB.get(`todos_${TODAY}`,[]);
+  const t = todos.find(t=>t.id===id);
+  if (!t) return;
+  showCtxMenu(window.innerWidth/2 - 90, window.innerHeight/2 - 70, [
+    { icon:'✏️', label:'编辑', action: ()=>editTodo(id) },
+    { icon:'✅', label:'标记完成', action: ()=>completeTodo(id) },
+    { icon:'🗑️', label:'删除', danger:true, action: ()=>deleteTodo(id) },
+  ]);
+}
+
+function editTodo(id) {
+  const todos = DB.get(`todos_${TODAY}`,[]);
+  const t = todos.find(t=>t.id===id);
+  if (!t) return;
+  showEditPrompt('编辑任务', t.text, newText => {
+    t.text = newText;
+    DB.set(`todos_${TODAY}`, todos);
+    renderTodos();
+  });
+}
+
+function deleteTodo(id) {
+  const todos = DB.get(`todos_${TODAY}`,[]);
+  const idx = todos.findIndex(t=>t.id===id);
+  if (idx>=0) todos.splice(idx,1);
+  DB.set(`todos_${TODAY}`, todos);
+  renderTodos();
+}
+
+/* ── GOAL menu ── */
+function showGoalMenu(tab, id) {
+  const goals = DB.get(`goals_${tab}`,[]);
+  const g = goals.find(g=>g.id===id);
+  if (!g) return;
+  showCtxMenu(window.innerWidth/2 - 90, window.innerHeight/2 - 70, [
+    { icon:'✏️', label:'编辑', action: ()=>editGoal(tab, id) },
+    { icon:'🎯', label:'标记达成', action: ()=>completeGoal(tab, id) },
+    { icon:'🗑️', label:'删除', danger:true, action: ()=>deleteGoal(tab, id) },
+  ]);
+}
+
+function editGoal(tab, id) {
+  const goals = DB.get(`goals_${tab}`,[]);
+  const g = goals.find(g=>g.id===id);
+  if (!g) return;
+  showEditPrompt('编辑目标', g.text, newText => {
+    g.text = newText;
+    DB.set(`goals_${tab}`, goals);
+    renderGoals(tab);
+  });
+}
+
+function deleteGoal(tab, id) {
+  const goals = DB.get(`goals_${tab}`,[]);
+  const idx = goals.findIndex(g=>g.id===id);
+  if (idx>=0) goals.splice(idx,1);
+  DB.set(`goals_${tab}`, goals);
+  renderGoals(tab);
+}
+
+/* ── HABIT menu ── */
+function showHabitMenu(i) {
+  const habits = DB.get('habits',[]);
+  const h = habits[i];
+  if (!h) return;
+  showCtxMenu(window.innerWidth/2 - 90, window.innerHeight/2 - 70, [
+    { icon:'✏️', label:'编辑名称', action: ()=>editHabit(i) },
+    { icon:'🗑️', label:'删除习惯', danger:true, action: ()=>deleteHabit(i) },
+  ]);
+}
+
+function editHabit(i) {
+  const habits = DB.get('habits',[]);
+  const h = habits[i];
+  if (!h) return;
+  showEditPrompt('编辑习惯', h.name, newText => {
+    h.name = newText;
+    DB.set('habits', habits);
+    renderHabits();
+  });
+}
+
+/* ── EDIT PROMPT ── */
+function showEditPrompt(title, currentVal, onConfirm) {
+  // reuse habitOverlay as a generic edit prompt
+  const box = document.querySelector('#habitOverlay .prompt-box');
+  box.querySelector('h3').textContent = title;
+  box.querySelector('p').textContent = '修改后点确认保存';
+  const inp = document.getElementById('habitNameInput');
+  inp.value = currentVal;
+  // swap confirm button behavior temporarily
+  const btn = box.querySelector('.btn-primary');
+  const oldClick = btn.onclick;
+  btn.onclick = () => {
+    const val = inp.value.trim();
+    if (!val) return;
+    closeOverlay('habitOverlay');
+    btn.onclick = oldClick;
+    onConfirm(val);
+  };
+  openOverlay('habitOverlay');
+  setTimeout(()=>inp.focus(), 100);
+}
+
+/* ── ARC ITEM DELETE ── */
+function deleteArcTodo(id) {
+  const todos = DB.get(`todos_${TODAY}`,[]);
+  const idx = todos.findIndex(t=>t.id===id);
+  if (idx>=0) todos.splice(idx,1);
+  DB.set(`todos_${TODAY}`, todos);
+  openArc('todo'); // refresh
+}
+
+function deleteArcGoal(tab, id) {
+  const goals = DB.get(`goals_${tab}`,[]);
+  const idx = goals.findIndex(g=>g.id===id);
+  if (idx>=0) goals.splice(idx,1);
+  DB.set(`goals_${tab}`, goals);
+  openArc('goals');
+}
+
+function deleteArcDiary(date) {
+  const arc = DB.get('diary_arc',[]);
+  const idx = arc.findIndex(d=>d.date===date);
+  if (idx>=0) arc.splice(idx,1);
+  DB.set('diary_arc', arc);
+  DB.del(`diary_${date}`);
+  openArc('diary');
+}
+
+function deleteArcSleep(date) {
+  DB.del(`sleep_${date}`);
+  const arc = DB.get('sleep_arc',[]);
+  openArc('sleep');
+}
+
+function deleteArcPomo(idx) {
+  const recs = DB.get('pomo_recs',[]);
+  recs.splice(idx,1);
+  DB.set('pomo_recs', recs);
+  openArc('pomo');
+}
+
 /* ============================================================
    RENDER ALL — called after cloud sync to refresh UI
    ============================================================ */
