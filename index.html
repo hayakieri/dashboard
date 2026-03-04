@@ -546,6 +546,7 @@ textarea, input { -webkit-appearance: none; }
 
 <!-- TOAST -->
 <div class="toast" id="toast">已保存 ✓</div>
+<div class="toast" id="syncBadge" style="background:var(--accent4);top:calc(var(--sat) + 38px)">☁️ 已同步</div>
 
 <div class="app-shell">
 
@@ -843,7 +844,22 @@ textarea, input { -webkit-appearance: none; }
 <script>
 'use strict';
 /* ============================================================
-   STORAGE LAYER — swap this section later for Supabase
+   SUPABASE CONFIG
+   ============================================================ */
+const SUPA_URL = 'https://lvptzamtoefmidqkjhzk.supabase.co';
+const SUPA_KEY = 'sb_publishable_btLloOaHHlBOQe5mnj2Wdg_a9RVAi0V';
+const SUPA_HDR = {
+  'Content-Type': 'application/json',
+  'apikey': SUPA_KEY,
+  'Authorization': 'Bearer ' + SUPA_KEY,
+  'Prefer': 'resolution=merge-duplicates'
+};
+
+/* ============================================================
+   STORAGE LAYER
+   Writes: localStorage immediately (instant UI) + Supabase background sync
+   Reads:  localStorage (fast, works offline)
+   Startup: pull cloud → merge into local → re-render (multi-device sync)
    ============================================================ */
 const DB = {
   get(key, def) {
@@ -851,10 +867,50 @@ const DB = {
     catch { return def; }
   },
   set(key, val) {
-    try { localStorage.setItem(key, JSON.stringify(val)); toast(); }
-    catch(e) { console.warn('Storage full?', e); }
+    try {
+      localStorage.setItem(key, JSON.stringify(val));
+      localStorage.setItem('_ts_' + key, Date.now());
+      toast();
+    } catch(e) { console.warn(e); }
+    DB._push(key, val);
   },
-  del(key) { try { localStorage.removeItem(key); } catch {} }
+  del(key) {
+    try { localStorage.removeItem(key); } catch {}
+    fetch(SUPA_URL + '/rest/v1/data?key=eq.' + encodeURIComponent(key), {
+      method: 'DELETE', headers: SUPA_HDR
+    }).catch(()=>{});
+  },
+  _push(key, val) {
+    fetch(SUPA_URL + '/rest/v1/data', {
+      method: 'POST',
+      headers: SUPA_HDR,
+      body: JSON.stringify({ key, value: JSON.stringify(val), updated_at: new Date().toISOString() })
+    }).catch(()=>{});
+  },
+  async pullAll() {
+    try {
+      const res = await fetch(
+        SUPA_URL + '/rest/v1/data?select=key,value,updated_at&order=updated_at.desc&limit=500',
+        { headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY } }
+      );
+      if (!res.ok) return;
+      const rows = await res.json();
+      let updated = 0;
+      rows.forEach(row => {
+        try {
+          const cloudTs = new Date(row.updated_at).getTime();
+          const localTs = parseInt(localStorage.getItem('_ts_' + row.key) || '0');
+          if (cloudTs > localTs) {
+            localStorage.setItem(row.key, row.value);
+            localStorage.setItem('_ts_' + row.key, cloudTs);
+            updated++;
+          }
+        } catch(e) {}
+      });
+      if (updated > 0) { renderAll(); }
+      showSyncBadge();
+    } catch(e) {}
+  }
 };
 
 /* ============================================================
@@ -1430,12 +1486,37 @@ function openArc(type) {
 /* ============================================================
    INIT
    ============================================================ */
+/* ============================================================
+   RENDER ALL — called after cloud sync to refresh UI
+   ============================================================ */
+function renderAll() {
+  renderHabits();
+  renderTodos();
+  ['week','month','year'].forEach(renderGoals);
+  renderEvents();
+  renderMood();
+  loadDiary();
+  loadSleep();
+  renderPomoHistory();
+}
+
+let syncBadgeTimer;
+function showSyncBadge() {
+  const el = document.getElementById('syncBadge');
+  el.classList.add('show');
+  clearTimeout(syncBadgeTimer);
+  syncBadgeTimer = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
 function init() {
   checkReset();
   renderDate();
   renderClock();
   renderProgress();
   fetchWeather();
+
+  // Sync from cloud (pulls latest data from Supabase, merges with local)
+  DB.pullAll();
 
   renderHabits();
   renderTodos();
