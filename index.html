@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="每日打卡">
+<meta name="theme-color" content="#f5f0e8">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>每日打卡板</title>
+<link href="https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&family=Noto+Serif+SC:wght@300;400;600&family=Caveat:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TOKENS & RESET
+   ============================================================ */
+:root {
+  --paper:    #f7f2ea;
+  --paper2:   #ede8dc;
+  --paper3:   #e2dcd0;
+  --paper4:   #d5cfc0;
+  --ink:      #28200f;
+  --ink2:     #4a3f2a;
+  --ink3:     #7d6e55;
+  --ink4:     #a89880;
+  --accent:   #b85c38;
+  --accent2:  #d4843e;
+  --accent3:  #5e8a5e;
+  --accent4:  #4a7298;
+  --red:      #c0392b;
+  --shadow:   rgba(40,32,15,0.10);
+  --shadow2:  rgba(40,32,15,0.18);
+  /* safe areas for PWA */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  font-family: 'Noto Serif SC', serif;
+  background: var(--paper3);
+  color: var(--ink);
+  /* lined paper background */
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 31px,
+      rgba(40,32,15,0.045) 31px, rgba(40,32,15,0.045) 32px);
+  overflow: hidden;
+  padding-top: var(--sat);
+  padding-bottom: var(--sab);
+  padding-left: var(--sal);
+  padding-right: var(--sar);
+}
+
+/* ============================================================
+   LAYOUT — two-pane on iPad, single-column fallback
+   ============================================================ */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  height: calc(100vh - var(--sat) - var(--sab));
+}
+
+.app-header {
+  flex-shrink: 0;
+  background: var(--paper);
+  border-bottom: 1.5px solid var(--paper3);
+  box-shadow: 0 2px 10px var(--shadow);
+  z-index: 50;
+}
+
+.app-body {
+  flex: 1;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 0;
+}
+
+/* LEFT SIDEBAR */
+.sidebar {
+  border-right: 1.5px solid var(--paper3);
+  overflow-y: auto;
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 10px 0 20px;
+}
+
+/* RIGHT MAIN */
+.main-area {
+  overflow-y: auto;
+  padding: 12px 14px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+/* scrollbar */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--paper4); border-radius: 2px; }
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.header-inner {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 10px 18px 8px;
+  gap: 12px;
+}
+
+.date-block {}
+.date-main {
+  font-family: 'ZCOOL XiaoWei', serif;
+  font-size: 26px;
+  color: var(--accent);
+  line-height: 1;
+  letter-spacing: 0.5px;
+}
+.date-sub {
+  font-size: 10px;
+  color: var(--ink3);
+  letter-spacing: 2px;
+  margin-top: 2px;
+}
+
+.clock-block { text-align: center; }
+.clock-time {
+  font-family: 'Caveat', cursive;
+  font-size: 38px;
+  color: var(--ink2);
+  line-height: 1;
+  letter-spacing: 1px;
+}
+.clock-label { font-size: 9px; color: var(--ink4); letter-spacing: 2px; margin-top: 1px; }
+
+.header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.weather-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--ink2);
+}
+.weather-icon { font-size: 22px; line-height: 1; }
+.weather-sub { font-size: 10px; color: var(--ink3); }
+
+/* event ticker */
+.event-ticker {
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent2) 100%);
+  color: #fff;
+  font-size: 11.5px;
+  padding: 5px 18px;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+.event-ticker.show { display: flex; }
+.ticker-icon { font-size: 14px; flex-shrink: 0; }
+.ticker-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ============================================================
+   PROGRESS BAR STRIP (sidebar top)
+   ============================================================ */
+.progress-strip {
+  padding: 10px 14px 8px;
+  border-bottom: 1px dashed var(--paper3);
+}
+.prog-row { margin-bottom: 6px; }
+.prog-row:last-child { margin-bottom: 0; }
+.prog-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--ink3); margin-bottom: 2px; letter-spacing: 1px; }
+.prog-track { height: 7px; background: var(--paper3); border-radius: 4px; overflow: hidden; }
+.prog-fill { height: 100%; border-radius: 4px; transition: width 1s cubic-bezier(.4,0,.2,1); }
+.prog-month { background: linear-gradient(90deg, var(--accent4), #80b3d4); }
+.prog-year  { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+
+/* ============================================================
+   SIDEBAR SECTION
+   ============================================================ */
+.sb-section {
+  padding: 9px 14px;
+  border-bottom: 1px dashed var(--paper3);
+}
+.sb-title {
+  font-family: 'ZCOOL XiaoWei', serif;
+  font-size: 13px;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.sb-title-left { display: flex; align-items: center; gap: 5px; }
+.sb-icon { font-size: 15px; }
+
+/* ============================================================
+   CARD (main area)
+   ============================================================ */
+.card {
+  background: var(--paper);
+  border-radius: 7px;
+  border: 1px solid var(--paper2);
+  box-shadow: 2px 3px 0 var(--paper3), 0 2px 8px var(--shadow);
+  overflow: hidden;
+}
+.card-header {
+  padding: 8px 13px 7px;
+  border-bottom: 1px dashed var(--paper3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-title {
+  font-family: 'ZCOOL XiaoWei', serif;
+  font-size: 13.5px;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.card-body { padding: 8px 13px 11px; }
+
+/* two-col inside main area */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+
+/* ============================================================
+   CHECKLIST
+   ============================================================ */
+.check-list { display: flex; flex-direction: column; }
+
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px dotted var(--paper3);
+  cursor: pointer;
+}
+.check-item:last-child { border-bottom: none; }
+
+.check-box {
+  width: 17px; height: 17px;
+  border: 1.5px solid var(--ink3);
+  border-radius: 2px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  background: #fff;
+  transition: all 0.15s;
+}
+.check-item.done .check-box  { background: var(--accent3); border-color: var(--accent3); color: #fff; }
+.check-item.done .check-text { text-decoration: line-through; color: var(--ink4); }
+
+.check-text  { font-size: 12.5px; color: var(--ink2); flex: 1; line-height: 1.3; }
+.check-meta  { font-size: 10px; color: var(--ink4); font-family: 'Caveat', cursive; white-space: nowrap; }
+.check-del   { font-size: 13px; color: var(--ink4); padding: 0 2px; cursor: pointer; flex-shrink: 0; }
+
+/* add row */
+.add-row {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 7px; padding-top: 6px;
+  border-top: 1px dashed var(--paper3);
+}
+.add-input {
+  flex: 1;
+  border: none;
+  background: var(--paper2);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: 'Noto Serif SC', serif;
+  color: var(--ink);
+  outline: none;
+}
+.add-input::placeholder { color: var(--ink4); }
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.btn {
+  border: none; border-radius: 4px; cursor: pointer;
+  font-family: 'Noto Serif SC', serif;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn:active { opacity: 0.75; transform: scale(0.96); }
+.btn-primary { background: var(--accent); color: #fff; padding: 4px 11px; font-size: 12px; }
+.btn-sm      { background: none; border: 1px solid var(--paper3); color: var(--ink3); padding: 2px 7px; font-size: 10px; border-radius: 3px; }
+.btn-blue    { background: var(--accent4); color: #fff; padding: 4px 11px; font-size: 12px; }
+.btn-green   { background: var(--accent3); color: #fff; padding: 4px 11px; font-size: 12px; }
+.btn-gray    { background: var(--ink3); color: #fff; padding: 4px 11px; font-size: 12px; }
+.btn-red     { background: var(--red); color: #fff; padding: 4px 11px; font-size: 12px; }
+.btn-big     { padding: 7px 20px; font-size: 14px; border-radius: 6px; }
+
+/* ============================================================
+   GOAL TABS
+   ============================================================ */
+.tab-row { display: flex; gap: 4px; margin-bottom: 7px; }
+.tab {
+  flex: 1; padding: 3px 0; text-align: center;
+  font-size: 10.5px; cursor: pointer;
+  border-radius: 3px; color: var(--ink3);
+  border: 1px solid var(--paper3);
+  background: transparent;
+  font-family: 'Noto Serif SC', serif;
+  transition: all 0.15s;
+}
+.tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ============================================================
+   MOOD
+   ============================================================ */
+.mood-row { display: flex; justify-content: space-around; padding: 4px 0 2px; }
+.mood-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  cursor: pointer; padding: 5px 8px;
+  border-radius: 8px; border: 2px solid transparent;
+  transition: all 0.15s;
+}
+.mood-btn.active { background: var(--paper2); border-color: var(--accent); }
+.mood-emoji { font-size: 24px; }
+.mood-label { font-size: 9px; color: var(--ink4); }
+.mood-status { font-size: 10.5px; color: var(--ink3); text-align: center; margin-top: 4px; }
+
+/* ============================================================
+   DIARY
+   ============================================================ */
+.diary-ta {
+  width: 100%; height: 62px;
+  border: none; background: var(--paper2); border-radius: 4px;
+  padding: 7px 9px;
+  font-size: 12.5px; font-family: 'Noto Serif SC', serif;
+  color: var(--ink); resize: none; outline: none; line-height: 1.65;
+}
+.diary-ta::placeholder { color: var(--ink4); font-style: italic; }
+
+/* ============================================================
+   SLEEP
+   ============================================================ */
+.sleep-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.sleep-block { display: flex; flex-direction: column; gap: 2px; }
+.sleep-lbl { font-size: 9px; color: var(--ink4); letter-spacing: 1.5px; }
+.sleep-btn {
+  background: var(--paper2); border: 1px solid var(--paper3);
+  border-radius: 5px; padding: 6px 4px;
+  font-size: 13px; font-family: 'Caveat', cursive; color: var(--ink2);
+  cursor: pointer; text-align: center; min-height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.sleep-btn.recorded { background: #e5f4e5; border-color: var(--accent3); color: var(--accent3); }
+.sleep-dur { font-size: 10.5px; color: var(--ink4); text-align: center; font-family: 'Caveat', cursive; margin-top: 4px; }
+
+/* ============================================================
+   POMODORO
+   ============================================================ */
+.pomo-display {
+  font-family: 'Caveat', cursive; font-size: 52px;
+  color: var(--accent); text-align: center;
+  line-height: 1; letter-spacing: 2px; padding: 2px 0;
+}
+.pomo-display.running { color: var(--red); }
+.pomo-controls { display: flex; gap: 8px; justify-content: center; margin-top: 6px; }
+.pomo-history { margin-top: 7px; max-height: 70px; overflow-y: auto; }
+.pomo-rec {
+  font-size: 10.5px; color: var(--ink3); padding: 3px 0;
+  border-bottom: 1px dotted var(--paper3);
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.pomo-rec:last-child { border-bottom: none; }
+
+/* ============================================================
+   EVENTS
+   ============================================================ */
+.event-list { display: flex; flex-direction: column; gap: 3px; }
+.event-tag {
+  display: flex; align-items: center; justify-content: space-between;
+  background: linear-gradient(135deg, #fff9f2, #ffeedd);
+  border-left: 3px solid var(--accent2);
+  padding: 4px 8px;
+  border-radius: 0 4px 4px 0;
+  font-size: 12px; color: var(--ink2);
+}
+.event-del { cursor: pointer; color: var(--ink4); font-size: 15px; padding: 0 2px; flex-shrink: 0; }
+
+/* ============================================================
+   STREAK BADGE
+   ============================================================ */
+.streak { font-size: 10px; color: var(--accent2); font-family: 'Caveat', cursive; margin-left: 3px; }
+
+/* ============================================================
+   SAVE TOAST
+   ============================================================ */
+.toast {
+  position: fixed; top: calc(var(--sat) + 10px); left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent3); color: #fff;
+  padding: 4px 14px; border-radius: 20px; font-size: 11px;
+  opacity: 0; transition: opacity 0.25s; z-index: 999;
+  pointer-events: none; white-space: nowrap;
+}
+.toast.show { opacity: 1; }
+
+/* ============================================================
+   MODAL
+   ============================================================ */
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(40,32,15,0.55);
+  z-index: 200;
+  display: none; align-items: center; justify-content: center;
+  padding: 20px;
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+.overlay.show { display: flex; }
+
+.modal-box {
+  background: var(--paper);
+  border-radius: 10px;
+  width: 100%; max-width: 460px;
+  max-height: 80vh; overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+}
+.modal-head {
+  padding: 13px 16px;
+  border-bottom: 1px dashed var(--paper3);
+  display: flex; justify-content: space-between; align-items: center;
+  position: sticky; top: 0; background: var(--paper); z-index: 1;
+}
+.modal-title { font-family: 'ZCOOL XiaoWei', serif; font-size: 16px; color: var(--accent); }
+.modal-close { cursor: pointer; font-size: 22px; color: var(--ink3); background: none; border: none; line-height: 1; }
+.modal-body { padding: 13px 16px; }
+
+/* archive item */
+.arc-section { margin-bottom: 12px; }
+.arc-section-title {
+  font-size: 10px; color: var(--ink3); letter-spacing: 2px;
+  margin-bottom: 5px; padding-bottom: 2px; border-bottom: 1px solid var(--paper3);
+}
+.arc-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 0; font-size: 12px; color: var(--ink2);
+  border-bottom: 1px dotted var(--paper3); gap: 8px;
+}
+.arc-item:last-child { border-bottom: none; }
+.arc-text { text-decoration: line-through; color: var(--ink4); flex: 1; }
+.arc-time { font-size: 10px; color: var(--ink4); font-family: 'Caveat', cursive; white-space: nowrap; }
+
+/* small modal (prompt) */
+.prompt-box {
+  background: var(--paper);
+  border-radius: 10px;
+  width: 100%; max-width: 340px;
+  padding: 22px 20px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+  text-align: center;
+}
+.prompt-box h3 {
+  font-family: 'ZCOOL XiaoWei', serif;
+  color: var(--accent); font-size: 16px; margin-bottom: 4px;
+}
+.prompt-box p { font-size: 11.5px; color: var(--ink3); margin-bottom: 13px; }
+.prompt-input {
+  width: 100%; border: 1px solid var(--paper3);
+  background: var(--paper2); border-radius: 5px;
+  padding: 8px 10px; font-size: 14px;
+  font-family: 'Noto Serif SC', serif;
+  color: var(--ink); outline: none; margin-bottom: 12px;
+}
+.prompt-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+/* ============================================================
+   FLOAT ACTION BUTTON
+   ============================================================ */
+.fab {
+  position: fixed;
+  bottom: calc(var(--sab) + 16px);
+  right: calc(var(--sar) + 16px);
+  width: 48px; height: 48px;
+  background: var(--accent); color: #fff;
+  border: none; border-radius: 50%; font-size: 20px;
+  cursor: pointer; box-shadow: 0 3px 14px var(--shadow2);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+  transition: transform 0.15s;
+}
+.fab:active { transform: scale(0.9); }
+
+/* ============================================================
+   IPHONE SLEEP SHORTCUT BANNER (shown on mobile)
+   ============================================================ */
+.phone-banner {
+  display: none;
+  background: var(--ink2); color: #fff;
+  padding: 10px 16px; text-align: center; font-size: 13px;
+}
+
+/* ============================================================
+   RESPONSIVE — phone layout
+   ============================================================ */
+@media (max-width: 700px) {
+  .app-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .sidebar {
+    border-right: none;
+    border-bottom: 1.5px solid var(--paper3);
+    /* sidebar becomes horizontal scroll strip on phone */
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px 0;
+    flex-wrap: nowrap;
+    max-height: 160px;
+  }
+  .progress-strip { min-width: 200px; border-bottom: none; border-right: 1px dashed var(--paper3); padding: 6px 12px; }
+  .sb-section { min-width: 220px; border-bottom: none; border-right: 1px dashed var(--paper3); }
+  .phone-banner { display: block; }
+  .date-main { font-size: 22px; }
+  .clock-time { font-size: 30px; }
+}
+
+textarea, input { -webkit-appearance: none; }
+</style>
+</head>
+<body>
+
+<!-- TOAST -->
+<div class="toast" id="toast">已保存 ✓</div>
+
+<div class="app-shell">
+
+  <!-- ==================== HEADER ==================== -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="date-block">
+        <div class="date-main" id="dateMain">—</div>
+        <div class="date-sub" id="dateSub">—</div>
+      </div>
+      <div class="clock-block">
+        <div class="clock-time" id="clock">00:00</div>
+        <div class="clock-label">现在时刻</div>
+      </div>
+      <div class="header-right">
+        <div class="weather-row">
+          <span class="weather-icon" id="wIcon">☁️</span>
+          <span id="wTemp" style="font-size:14px;font-weight:600">—</span>
+        </div>
+        <div class="weather-sub" id="wDesc">获取天气中…</div>
+        <div class="weather-sub" id="wCity"></div>
+      </div>
+    </div>
+    <!-- event ticker -->
+    <div class="event-ticker" id="eventTicker">
+      <span class="ticker-icon">📌</span>
+      <span class="ticker-text" id="tickerText"></span>
+    </div>
+  </header>
+
+  <div class="app-body">
+
+    <!-- ==================== SIDEBAR ==================== -->
+    <aside class="sidebar">
+
+      <!-- Progress -->
+      <div class="progress-strip">
+        <div class="prog-row">
+          <div class="prog-labels"><span>📅 本月进度</span><span id="mPct">0%</span></div>
+          <div class="prog-track"><div class="prog-fill prog-month" id="mBar" style="width:0%"></div></div>
+        </div>
+        <div class="prog-row">
+          <div class="prog-labels"><span>🌿 年度进度</span><span id="yPct">0%</span></div>
+          <div class="prog-track"><div class="prog-fill prog-year" id="yBar" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <!-- Habits -->
+      <div class="sb-section">
+        <div class="sb-title">
+          <span class="sb-title-left"><span class="sb-icon">🔁</span>每日习惯</span>
+          <button class="btn btn-sm" onclick="openAddHabit()">+ 新增</button>
+        </div>
+        <div class="check-list" id="habitList"></div>
+      </div>
+
+      <!-- Sleep -->
+      <div class="sb-section">
+        <div class="sb-title">
+          <span class="sb-title-left"><span class="sb-icon">💤</span>睡眠记录</span>
+          <button class="btn btn-sm" onclick="openArc('sleep')">历史</button>
+        </div>
+        <div class="sleep-grid">
+          <div class="sleep-block">
+            <div class="sleep-lbl">入睡时间</div>
+            <div class="sleep-btn" id="sleepBtn" onclick="recordSleep()">
+              <span id="sleepTxt">记录 🌙</span>
+            </div>
+          </div>
+          <div class="sleep-block">
+            <div class="sleep-lbl">起床时间</div>
+            <div class="sleep-btn" id="wakeBtn" onclick="recordWake()">
+              <span id="wakeTxt">记录 ☀️</span>
+            </div>
+          </div>
+        </div>
+        <div class="sleep-dur" id="sleepDur"></div>
+      </div>
+
+      <!-- Mood -->
+      <div class="sb-section">
+        <div class="sb-title">
+          <span class="sb-title-left"><span class="sb-icon">🌈</span>今日心情</span>
+        </div>
+        <div class="mood-row">
+          <div class="mood-btn" onclick="setMood('😄','开心')" data-m="😄"><span class="mood-emoji">😄</span><span class="mood-label">开心</span></div>
+          <div class="mood-btn" onclick="setMood('😌','平静')" data-m="😌"><span class="mood-emoji">😌</span><span class="mood-label">平静</span></div>
+          <div class="mood-btn" onclick="setMood('😔','低落')" data-m="😔"><span class="mood-emoji">😔</span><span class="mood-label">低落</span></div>
+          <div class="mood-btn" onclick="setMood('😤','烦躁')" data-m="😤"><span class="mood-emoji">😤</span><span class="mood-label">烦躁</span></div>
+          <div class="mood-btn" onclick="setMood('🥱','疲惫')" data-m="🥱"><span class="mood-emoji">🥱</span><span class="mood-label">疲惫</span></div>
+        </div>
+        <div class="mood-status" id="moodStatus">点击选择今日心情</div>
+      </div>
+
+    </aside>
+
+    <!-- ==================== MAIN AREA ==================== -->
+    <main class="main-area">
+
+      <!-- Todo -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span>✏️</span> 今日 Todo</div>
+          <button class="btn btn-sm" onclick="openArc('todo')">已完成</button>
+        </div>
+        <div class="card-body">
+          <div class="check-list" id="todoList"></div>
+          <div class="add-row">
+            <input class="add-input" id="todoInput" placeholder="添加今日任务…" onkeydown="if(event.key==='Enter')addTodo()">
+            <button class="btn btn-primary" onclick="addTodo()">添加</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Goals -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span>🎯</span> 目标清单</div>
+          <button class="btn btn-sm" onclick="openArc('goals')">已达成</button>
+        </div>
+        <div class="card-body">
+          <div class="tab-row">
+            <button class="tab active" onclick="switchGoal('week',this)">本周</button>
+            <button class="tab" onclick="switchGoal('month',this)">本月</button>
+            <button class="tab" onclick="switchGoal('year',this)">年度</button>
+          </div>
+          <div class="tab-panel active" id="gp-week">
+            <div class="check-list" id="gl-week"></div>
+            <div class="add-row">
+              <input class="add-input" id="gi-week" placeholder="本周目标…" onkeydown="if(event.key==='Enter')addGoal('week')">
+              <button class="btn btn-primary" onclick="addGoal('week')">添加</button>
+            </div>
+          </div>
+          <div class="tab-panel" id="gp-month">
+            <div class="check-list" id="gl-month"></div>
+            <div class="add-row">
+              <input class="add-input" id="gi-month" placeholder="本月目标…" onkeydown="if(event.key==='Enter')addGoal('month')">
+              <button class="btn btn-primary" onclick="addGoal('month')">添加</button>
+            </div>
+          </div>
+          <div class="tab-panel" id="gp-year">
+            <div class="check-list" id="gl-year"></div>
+            <div class="add-row">
+              <input class="add-input" id="gi-year" placeholder="年度目标…" onkeydown="if(event.key==='Enter')addGoal('year')">
+              <button class="btn btn-primary" onclick="addGoal('year')">添加</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pomodoro + Diary (two-col) -->
+      <div class="two-col">
+        <!-- Pomodoro -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span>🍅</span> 专注计时</div>
+            <button class="btn btn-sm" onclick="openArc('pomo')">记录</button>
+          </div>
+          <div class="card-body" style="padding-top:6px">
+            <div class="pomo-display" id="pomoDisplay">00:00</div>
+            <div class="pomo-controls">
+              <button class="btn btn-primary btn-big" id="pomoBtn" onclick="togglePomo()">开始</button>
+              <button class="btn btn-gray btn-big" onclick="resetPomo()">重置</button>
+            </div>
+            <div class="pomo-history" id="pomoHistory"></div>
+          </div>
+        </div>
+
+        <!-- Diary -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span>🖊️</span> 一句话日记</div>
+            <button class="btn btn-sm" onclick="openArc('diary')">历史</button>
+          </div>
+          <div class="card-body" style="padding-top:6px">
+            <textarea class="diary-ta" id="diaryTa" placeholder="今天最想记住的一件事…" onblur="saveDiary()"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reminders / Events -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span>📌</span> 今日提醒</div>
+          <div style="display:flex;gap:5px">
+            <button class="btn btn-sm" onclick="showReminderHelp()">📱 捷径导入</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="event-list" id="eventList" style="margin-bottom:6px"></div>
+          <div class="add-row" style="margin-top:0;padding-top:0;border:none;margin-bottom:5px">
+            <input class="add-input" id="evtInput" placeholder="手动添加备忘、节日…" onkeydown="if(event.key==='Enter')addEvent()">
+            <button class="btn btn-primary" onclick="addEvent()">添加</button>
+          </div>
+          <div class="add-row" style="border-top:1px dashed var(--paper3);padding-top:6px;margin-top:0">
+            <input class="add-input" id="pasteInput" placeholder="📋 粘贴捷径内容后点导入…" style="font-size:11px">
+            <button class="btn btn-blue" onclick="importReminders()">导入</button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div><!-- app-body -->
+</div><!-- app-shell -->
+
+<!-- FAB -->
+<button class="fab" onclick="openArc('all')" title="归档">📂</button>
+
+<!-- ===================== OVERLAYS ===================== -->
+
+<!-- Archive modal -->
+<div class="overlay" id="arcOverlay" onclick="if(event.target===this)closeArc()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div class="modal-title" id="arcTitle">归档</div>
+      <button class="modal-close" onclick="closeArc()">×</button>
+    </div>
+    <div class="modal-body" id="arcBody"></div>
+  </div>
+</div>
+
+<!-- Pomo naming -->
+<div class="overlay" id="pomoOverlay">
+  <div class="prompt-box">
+    <h3>🍅 这段时间做了什么？</h3>
+    <p id="pomoDurLabel">时长：00:00</p>
+    <input class="prompt-input" id="pomoNameInput" placeholder="记录这段专注…" onkeydown="if(event.key==='Enter')savePomo()">
+    <div class="prompt-actions">
+      <button class="btn btn-primary btn-big" onclick="savePomo()">保存</button>
+      <button class="btn btn-gray btn-big" onclick="discardPomo()">不记录</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add habit -->
+<div class="overlay" id="habitOverlay">
+  <div class="prompt-box">
+    <h3>➕ 新增每日习惯</h3>
+    <p>每天自动重置，可记录连续天数</p>
+    <input class="prompt-input" id="habitNameInput" placeholder="习惯名称…" onkeydown="if(event.key==='Enter')confirmAddHabit()">
+    <div class="prompt-actions">
+      <button class="btn btn-primary btn-big" onclick="confirmAddHabit()">添加</button>
+      <button class="btn btn-gray btn-big" onclick="closeOverlay('habitOverlay')">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reminder help -->
+<div class="overlay" id="reminderOverlay" onclick="if(event.target===this)closeOverlay('reminderOverlay')">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div class="modal-title">📱 iPhone 捷径导入提醒事项</div>
+      <button class="modal-close" onclick="closeOverlay('reminderOverlay')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--paper2);padding:11px;border-radius:6px;margin-bottom:10px;font-size:11.5px;color:var(--ink2);line-height:1.9">
+        <strong>在 iPhone「捷径」App 新建捷径，按顺序添加：</strong><br><br>
+        <div style="background:#fff;padding:7px 10px;border-radius:5px;border-left:3px solid var(--accent4);margin-bottom:5px">
+          ① <strong>查找提醒事项</strong><br>
+          筛选：截止日期 = 今天 ｜ 限制：关闭
+        </div>
+        <div style="background:#fff;padding:7px 10px;border-radius:5px;border-left:3px solid var(--accent4);margin-bottom:5px">
+          ② <strong>重复</strong>（对每个提醒事项）<br>
+          循环内：<strong>将文本添加到变量</strong><br>
+          文本 = 重复项目的名称，变量名 = <code>result</code>
+        </div>
+        <div style="background:#fff;padding:7px 10px;border-radius:5px;border-left:3px solid var(--accent4);margin-bottom:5px">
+          ③ <strong>复制到剪贴板</strong>（内容选变量 result）
+        </div>
+        <div style="background:#fff;padding:7px 10px;border-radius:5px;border-left:3px solid var(--accent3)">
+          ④（推荐）设置为每天早上 <strong>自动化</strong> 运行
+        </div>
+      </div>
+      <div style="background:#fff8e1;padding:8px 10px;border-radius:5px;font-size:10.5px;color:#7d6200;margin-bottom:10px">
+        💡 iPhone 和 iPad Air 5 登同一 Apple ID + 开蓝牙WiFi →
+        <strong>通用剪贴板</strong>自动同步，iPhone 复制后直接在 iPad 粘贴到下方输入框点导入即可
+      </div>
+      <button class="btn btn-primary btn-big" style="width:100%" onclick="closeOverlay('reminderOverlay')">明白了</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sleep quick record (for iPhone homescreen shortcut) -->
+<div class="overlay" id="sleepQuickOverlay" onclick="if(event.target===this)closeOverlay('sleepQuickOverlay')">
+  <div class="prompt-box">
+    <h3>💤 快捷睡眠记录</h3>
+    <p>在 iPhone 上添加到主屏幕后，从这里一键记录</p>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:8px">
+      <button class="btn btn-big" style="background:var(--ink2);color:#fff;flex:1" onclick="recordSleep();closeOverlay('sleepQuickOverlay')">🌙 记录入睡</button>
+      <button class="btn btn-big" style="background:var(--accent2);color:#fff;flex:1" onclick="recordWake();closeOverlay('sleepQuickOverlay')">☀️ 记录起床</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   STORAGE LAYER — swap this section later for Supabase
+   ============================================================ */
+const DB = {
+  get(key, def) {
+    try { const v = localStorage.getItem(key); return v !== null ? JSON.parse(v) : def; }
+    catch { return def; }
+  },
+  set(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); toast(); }
+    catch(e) { console.warn('Storage full?', e); }
+  },
+  del(key) { try { localStorage.removeItem(key); } catch {} }
+};
+
+/* ============================================================
+   TIME HELPERS
+   ============================================================ */
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+function pad(n) { return String(n).padStart(2,'0'); }
+function hhmm() { const d=new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+function fullTS() { return `${todayKey()} ${hhmm()}`; }
+function yday() {
+  const d=new Date(); d.setDate(d.getDate()-1);
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+const TODAY = todayKey();
+
+/* ============================================================
+   TOAST
+   ============================================================ */
+let toastTimer;
+function toast(msg='已保存 ✓') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.classList.remove('show'), 1400);
+}
+
+/* ============================================================
+   OVERLAY HELPERS
+   ============================================================ */
+function openOverlay(id) { document.getElementById(id).classList.add('show'); }
+function closeOverlay(id) { document.getElementById(id).classList.remove('show'); }
+function closeArc() { closeOverlay('arcOverlay'); }
+
+/* ============================================================
+   CLOCK & DATE
+   ============================================================ */
+function renderClock() {
+  document.getElementById('clock').textContent = hhmm();
+}
+function renderDate() {
+  const d = new Date();
+  const WD = ['日','一','二','三','四','五','六'];
+  const MN = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+  document.getElementById('dateMain').textContent = `${d.getMonth()+1}月${d.getDate()}日`;
+  document.getElementById('dateSub').textContent = `${d.getFullYear()} · ${MN[d.getMonth()]} · 星期${WD[d.getDay()]}`;
+}
+setInterval(renderClock, 10000);
+
+/* ============================================================
+   PROGRESS
+   ============================================================ */
+function renderProgress() {
+  const d = new Date();
+  const dim = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+  const mp = Math.round(d.getDate()/dim*100);
+  document.getElementById('mPct').textContent = mp+'%';
+  document.getElementById('mBar').style.width = mp+'%';
+
+  const start = new Date(d.getFullYear(),0,1);
+  const doy = Math.round((d-start)/(864e5))+1;
+  const diy = ((d.getFullYear()%4===0&&d.getFullYear()%100!==0)||d.getFullYear()%400===0)?366:365;
+  const yp = Math.round(doy/diy*100);
+  document.getElementById('yPct').textContent = yp+'%';
+  document.getElementById('yBar').style.width = yp+'%';
+}
+
+/* ============================================================
+   WEATHER
+   ============================================================ */
+const WC_ICON = {0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',51:'🌦️',53:'🌦️',55:'🌧️',61:'🌧️',63:'🌧️',65:'🌧️',71:'🌨️',73:'❄️',75:'❄️',80:'🌦️',81:'🌧️',82:'⛈️',95:'⛈️',96:'⛈️',99:'⛈️'};
+const WC_DESC = {0:'晴天',1:'主要晴',2:'局部多云',3:'阴天',45:'雾',48:'冻雾',51:'小毛雨',53:'毛毛雨',55:'大毛雨',61:'小雨',63:'中雨',65:'大雨',71:'小雪',73:'中雪',75:'大雪',80:'阵雨',81:'中阵雨',82:'暴雨',95:'雷暴',96:'雷暴',99:'强雷暴'};
+
+function fetchWeather() {
+  if (!navigator.geolocation) { document.getElementById('wDesc').textContent='无定位权限'; return; }
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const {latitude:lat,longitude:lon}=pos.coords;
+    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=auto`)
+      .then(r=>r.json()).then(d=>{
+        const cw=d.current_weather, code=cw.weathercode;
+        document.getElementById('wIcon').textContent = WC_ICON[code]||'🌡️';
+        document.getElementById('wTemp').textContent = Math.round(cw.temperature)+'°C';
+        document.getElementById('wDesc').textContent = WC_DESC[code]||'未知';
+        fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
+          .then(r=>r.json()).then(g=>{
+            document.getElementById('wCity').textContent = g.address.city||g.address.town||g.address.county||'';
+          }).catch(()=>{});
+      }).catch(()=>{ document.getElementById('wDesc').textContent='网络异常'; });
+  }, ()=>{ document.getElementById('wDesc').textContent='已拒绝定位'; });
+}
+
+/* ============================================================
+   DAILY RESET
+   ============================================================ */
+function checkReset() {
+  const last = DB.get('last_reset','');
+  if (last === TODAY) return;
+  // reset habits
+  const habits = DB.get('habits',[]);
+  habits.forEach(h=>{ h.done=false; h.doneAt=null; });
+  DB.set('habits', habits);
+  // reset sleep for new day (keep old data by date key)
+  DB.set('last_reset', TODAY);
+}
+
+/* ============================================================
+   HABITS
+   ============================================================ */
+function renderHabits() {
+  const habits = DB.get('habits',[]);
+  const el = document.getElementById('habitList');
+  el.innerHTML='';
+  if (!habits.length) {
+    el.innerHTML='<div style="font-size:11px;color:var(--ink4);padding:4px 0">点击「+ 新增」添加习惯</div>';
+    return;
+  }
+  habits.forEach((h,i)=>{
+    const div=document.createElement('div');
+    div.className='check-item'+(h.done?' done':'');
+    div.innerHTML=`
+      <div class="check-box" onclick="toggleHabit(${i})">${h.done?'✓':''}</div>
+      <div class="check-text" onclick="toggleHabit(${i})">${h.name}<span class="streak">${h.streak>1?'🔥'+h.streak:''}</span></div>
+      <div class="check-meta">${h.doneAt||''}</div>
+      <span class="check-del" onclick="deleteHabit(${i})">✕</span>
+    `;
+    el.appendChild(div);
+  });
+}
+
+function toggleHabit(i) {
+  const habits = DB.get('habits',[]);
+  const h = habits[i];
+  h.done = !h.done;
+  if (h.done) {
+    h.doneAt = hhmm();
+    const lastDay = DB.get(`hstreak_last_${i}`,'');
+    h.streak = (lastDay===yday()) ? (h.streak||0)+1 : 1;
+    DB.set(`hstreak_last_${i}`, TODAY);
+    // archive
+    const arc = DB.get(`harc_${TODAY}`,[]);
+    arc.push({name:h.name, ts:fullTS()});
+    DB.set(`harc_${TODAY}`, arc);
+  } else {
+    h.doneAt=null;
+  }
+  DB.set('habits', habits);
+  renderHabits();
+}
+
+function deleteHabit(i) {
+  const habits = DB.get('habits',[]);
+  habits.splice(i,1);
+  DB.set('habits', habits);
+  renderHabits();
+}
+
+function openAddHabit() {
+  document.getElementById('habitNameInput').value='';
+  openOverlay('habitOverlay');
+  setTimeout(()=>document.getElementById('habitNameInput').focus(),100);
+}
+
+function confirmAddHabit() {
+  const val = document.getElementById('habitNameInput').value.trim();
+  if (!val) return;
+  const habits = DB.get('habits',[]);
+  habits.push({name:val, done:false, doneAt:null, streak:0});
+  DB.set('habits', habits);
+  closeOverlay('habitOverlay');
+  renderHabits();
+}
+
+/* ============================================================
+   TODO
+   ============================================================ */
+function renderTodos() {
+  const todos = DB.get(`todos_${TODAY}`,[]);
+  const el = document.getElementById('todoList');
+  el.innerHTML='';
+  const active = todos.filter(t=>!t.done);
+  if (!active.length) {
+    el.innerHTML='<div style="font-size:11px;color:var(--ink4);padding:4px 0">今日任务已全部完成 🎉</div>';
+  }
+  active.forEach(t=>{
+    const div=document.createElement('div');
+    div.className='check-item';
+    div.innerHTML=`
+      <div class="check-box" onclick="completeTodo(${t.id})"></div>
+      <div class="check-text" onclick="completeTodo(${t.id})">${t.text}</div>
+    `;
+    el.appendChild(div);
+  });
+}
+
+function addTodo() {
+  const inp = document.getElementById('todoInput');
+  const val = inp.value.trim();
+  if (!val) return;
+  const todos = DB.get(`todos_${TODAY}`,[]);
+  todos.push({id:Date.now(), text:val, done:false, doneAt:null});
+  DB.set(`todos_${TODAY}`, todos);
+  inp.value='';
+  renderTodos();
+}
+
+function completeTodo(id) {
+  const todos = DB.get(`todos_${TODAY}`,[]);
+  const t = todos.find(t=>t.id===id);
+  if (t) { t.done=true; t.doneAt=fullTS(); }
+  DB.set(`todos_${TODAY}`, todos);
+  renderTodos();
+}
+
+/* ============================================================
+   GOALS
+   ============================================================ */
+function switchGoal(tab, btn) {
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('gp-'+tab).classList.add('active');
+}
+
+function renderGoals(tab) {
+  const goals = DB.get(`goals_${tab}`,[]);
+  const el = document.getElementById('gl-'+tab);
+  el.innerHTML='';
+  goals.filter(g=>!g.done).forEach(g=>{
+    const div=document.createElement('div');
+    div.className='check-item';
+    div.innerHTML=`
+      <div class="check-box" onclick="completeGoal('${tab}',${g.id})"></div>
+      <div class="check-text" onclick="completeGoal('${tab}',${g.id})">${g.text}</div>
+    `;
+    el.appendChild(div);
+  });
+}
+
+function addGoal(tab) {
+  const inp = document.getElementById('gi-'+tab);
+  const val = inp.value.trim();
+  if (!val) return;
+  const goals = DB.get(`goals_${tab}`,[]);
+  goals.push({id:Date.now(), text:val, done:false, doneAt:null, created:fullTS()});
+  DB.set(`goals_${tab}`, goals);
+  inp.value='';
+  renderGoals(tab);
+}
+
+function completeGoal(tab,id) {
+  const goals = DB.get(`goals_${tab}`,[]);
+  const g = goals.find(g=>g.id===id);
+  if (g) { g.done=true; g.doneAt=fullTS(); }
+  DB.set(`goals_${tab}`, goals);
+  renderGoals(tab);
+}
+
+/* ============================================================
+   EVENTS / REMINDERS
+   ============================================================ */
+function renderEvents() {
+  const events = DB.get(`events_${TODAY}`,[]);
+  const el = document.getElementById('eventList');
+  el.innerHTML='';
+  events.forEach((e,i)=>{
+    const div=document.createElement('div');
+    div.className='event-tag';
+    div.innerHTML=`<span>${e}</span><span class="event-del" onclick="delEvent(${i})">✕</span>`;
+    el.appendChild(div);
+  });
+  // ticker
+  if (events.length) {
+    document.getElementById('eventTicker').classList.add('show');
+    document.getElementById('tickerText').textContent = events.join('  ·  ');
+  } else {
+    document.getElementById('eventTicker').classList.remove('show');
+  }
+}
+
+function addEvent() {
+  const inp = document.getElementById('evtInput');
+  const val = inp.value.trim();
+  if (!val) return;
+  const ev = DB.get(`events_${TODAY}`,[]);
+  ev.push(val);
+  DB.set(`events_${TODAY}`, ev);
+  inp.value='';
+  renderEvents();
+}
+
+function delEvent(i) {
+  const ev = DB.get(`events_${TODAY}`,[]);
+  ev.splice(i,1);
+  DB.set(`events_${TODAY}`, ev);
+  renderEvents();
+}
+
+function importReminders() {
+  const inp = document.getElementById('pasteInput');
+  let raw = inp.value.trim();
+  if (!raw) {
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(t=>{ if(t.trim()){inp.value=t.trim();importReminders();} else alert('剪贴板为空，请先运行捷径'); }).catch(()=>alert('请手动粘贴后点导入'));
+    } else { alert('请手动粘贴捷径内容后点导入'); }
+    return;
+  }
+  const lines = raw.split(/[\n,，、;；]+/).map(l=>l.trim()).filter(Boolean);
+  if (!lines.length) { alert('未解析到内容'); return; }
+  const ev = DB.get(`events_${TODAY}`,[]);
+  lines.forEach(l=>{ if(!ev.includes(l)) ev.push(l); });
+  DB.set(`events_${TODAY}`, ev);
+  inp.value='';
+  renderEvents();
+  toast(`已导入 ${lines.length} 条提醒 ✓`);
+}
+
+function showReminderHelp() { openOverlay('reminderOverlay'); }
+
+/* ============================================================
+   MOOD
+   ============================================================ */
+function renderMood() {
+  const m = DB.get(`mood_${TODAY}`,null);
+  if (!m) return;
+  document.querySelectorAll('.mood-btn').forEach(b=>{
+    b.classList.toggle('active', b.dataset.m===m.emoji);
+  });
+  document.getElementById('moodStatus').textContent = `今天是${m.label}的一天 ${m.emoji}`;
+}
+
+function setMood(emoji,label) {
+  DB.set(`mood_${TODAY}`,{emoji,label,ts:fullTS()});
+  // archive
+  const arc = DB.get('mood_arc',[]);
+  const idx = arc.findIndex(a=>a.date===TODAY);
+  const entry = {date:TODAY,emoji,label};
+  if (idx>=0) arc[idx]=entry; else arc.push(entry);
+  DB.set('mood_arc', arc);
+  renderMood();
+}
+
+/* ============================================================
+   DIARY
+   ============================================================ */
+function loadDiary() {
+  document.getElementById('diaryTa').value = DB.get(`diary_${TODAY}`,'');
+}
+function saveDiary() {
+  const val = document.getElementById('diaryTa').value;
+  DB.set(`diary_${TODAY}`, val);
+  const arc = DB.get('diary_arc',[]);
+  const idx = arc.findIndex(d=>d.date===TODAY);
+  if (idx>=0) arc[idx]={date:TODAY,text:val}; else arc.push({date:TODAY,text:val});
+  DB.set('diary_arc', arc);
+}
+
+/* ============================================================
+   SLEEP
+   ============================================================ */
+function loadSleep() {
+  const s = DB.get(`sleep_${TODAY}`,{});
+  if (s.sleep) {
+    document.getElementById('sleepTxt').textContent = '🌙 '+s.sleep;
+    document.getElementById('sleepBtn').classList.add('recorded');
+  }
+  if (s.wake) {
+    document.getElementById('wakeTxt').textContent = '☀️ '+s.wake;
+    document.getElementById('wakeBtn').classList.add('recorded');
+  }
+  updateSleepDur(s);
+}
+function recordSleep() {
+  const s = DB.get(`sleep_${TODAY}`,{});
+  s.sleep = hhmm();
+  DB.set(`sleep_${TODAY}`, s);
+  document.getElementById('sleepTxt').textContent = '🌙 '+s.sleep;
+  document.getElementById('sleepBtn').classList.add('recorded');
+  updateSleepDur(s);
+}
+function recordWake() {
+  const s = DB.get(`sleep_${TODAY}`,{});
+  s.wake = hhmm();
+  DB.set(`sleep_${TODAY}`, s);
+  document.getElementById('wakeTxt').textContent = '☀️ '+s.wake;
+  document.getElementById('wakeBtn').classList.add('recorded');
+  updateSleepDur(s);
+}
+function updateSleepDur(s) {
+  if (!s.sleep||!s.wake) return;
+  const [sh,sm]=s.sleep.split(':').map(Number);
+  const [wh,wm]=s.wake.split(':').map(Number);
+  let mins=(wh*60+wm)-(sh*60+sm);
+  if(mins<0)mins+=1440;
+  document.getElementById('sleepDur').textContent=`睡眠时长 ${Math.floor(mins/60)}h${mins%60}m`;
+}
+
+/* ============================================================
+   POMODORO
+   ============================================================ */
+let pomoSec=0, pomoRunning=false, pomoTimer=null, pomoStart=null;
+
+function togglePomo() {
+  if (!pomoRunning) {
+    pomoRunning=true; pomoStart=fullTS();
+    document.getElementById('pomoBtn').textContent='结束';
+    document.getElementById('pomoBtn').style.background='var(--red)';
+    document.getElementById('pomoDisplay').classList.add('running');
+    pomoTimer=setInterval(()=>{ pomoSec++; renderPomoDisplay(); },1000);
+  } else {
+    clearInterval(pomoTimer); pomoRunning=false;
+    document.getElementById('pomoBtn').textContent='开始';
+    document.getElementById('pomoBtn').style.background='';
+    document.getElementById('pomoDisplay').classList.remove('running');
+    // show naming
+    const h=Math.floor(pomoSec/3600),m=Math.floor((pomoSec%3600)/60),s=pomoSec%60;
+    document.getElementById('pomoDurLabel').textContent=`时长：${h?h+'h':''}${m}m${s}s`;
+    document.getElementById('pomoNameInput').value='';
+    openOverlay('pomoOverlay');
+    setTimeout(()=>document.getElementById('pomoNameInput').focus(),100);
+  }
+}
+function resetPomo() {
+  clearInterval(pomoTimer); pomoRunning=false; pomoSec=0;
+  document.getElementById('pomoBtn').textContent='开始';
+  document.getElementById('pomoBtn').style.background='';
+  document.getElementById('pomoDisplay').classList.remove('running');
+  renderPomoDisplay();
+}
+function renderPomoDisplay() {
+  const h=Math.floor(pomoSec/3600),m=Math.floor((pomoSec%3600)/60),s=pomoSec%60;
+  document.getElementById('pomoDisplay').textContent=h?`${pad(h)}:${pad(m)}:${pad(s)}`:`${pad(m)}:${pad(s)}`;
+}
+function savePomo() {
+  const name=document.getElementById('pomoNameInput').value.trim()||'专注时段';
+  const h=Math.floor(pomoSec/3600),m=Math.floor((pomoSec%3600)/60),s=pomoSec%60;
+  const dur=`${h?h+'h':''}${m}m${s}s`;
+  const recs=DB.get('pomo_recs',[]);
+  recs.unshift({name,dur,sec:pomoSec,start:pomoStart,end:fullTS(),date:TODAY});
+  DB.set('pomo_recs',recs);
+  closeOverlay('pomoOverlay');
+  pomoSec=0; renderPomoDisplay(); renderPomoHistory();
+}
+function discardPomo() {
+  closeOverlay('pomoOverlay');
+  pomoSec=0; renderPomoDisplay();
+}
+function renderPomoHistory() {
+  const recs=DB.get('pomo_recs',[]).filter(r=>r.date===TODAY);
+  const el=document.getElementById('pomoHistory');
+  el.innerHTML='';
+  recs.slice(0,4).forEach(r=>{
+    const div=document.createElement('div');
+    div.className='pomo-rec';
+    div.innerHTML=`<span>🍅 ${r.name}</span><span>${r.dur}</span>`;
+    el.appendChild(div);
+  });
+}
+
+/* ============================================================
+   ARCHIVE MODAL
+   ============================================================ */
+function openArc(type) {
+  openOverlay('arcOverlay');
+  const body=document.getElementById('arcBody');
+  const title=document.getElementById('arcTitle');
+  body.innerHTML='';
+
+  if (type==='todo') {
+    title.textContent='📋 今日已完成';
+    const done=DB.get(`todos_${TODAY}`,[]).filter(t=>t.done);
+    if(!done.length){body.innerHTML='<p style="color:var(--ink4);font-size:12px;padding:8px 0">今日暂无已完成任务</p>';return;}
+    done.forEach(t=>{
+      const d=document.createElement('div'); d.className='arc-item';
+      d.innerHTML=`<span class="arc-text">${t.text}</span><span class="arc-time">✓ ${t.doneAt}</span>`;
+      body.appendChild(d);
+    });
+  }
+
+  else if (type==='goals') {
+    title.textContent='🎯 已达成目标';
+    ['week','month','year'].forEach(tab=>{
+      const done=DB.get(`goals_${tab}`,[]).filter(g=>g.done);
+      if(!done.length)return;
+      const sec=document.createElement('div'); sec.className='arc-section';
+      const lbl={week:'本周',month:'本月',year:'年度'};
+      sec.innerHTML=`<div class="arc-section-title">${lbl[tab]}目标</div>`;
+      done.forEach(g=>{
+        const d=document.createElement('div'); d.className='arc-item';
+        d.innerHTML=`<span class="arc-text">${g.text}</span><span class="arc-time">✓ ${g.doneAt}</span>`;
+        sec.appendChild(d);
+      });
+      body.appendChild(sec);
+    });
+    if(!body.children.length)body.innerHTML='<p style="color:var(--ink4);font-size:12px;padding:8px 0">暂无已达成目标</p>';
+  }
+
+  else if (type==='diary') {
+    title.textContent='🖊️ 日记历史';
+    const arc=DB.get('diary_arc',[]).filter(d=>d.text).reverse();
+    if(!arc.length){body.innerHTML='<p style="color:var(--ink4);font-size:12px;padding:8px 0">暂无日记</p>';return;}
+    arc.slice(0,30).forEach(d=>{
+      const el=document.createElement('div'); el.className='arc-item';
+      el.style.flexDirection='column'; el.style.alignItems='flex-start'; el.style.gap='2px';
+      el.innerHTML=`<span style="font-size:10px;color:var(--ink4)">${d.date}</span><span style="font-size:12px;color:var(--ink2)">${d.text}</span>`;
+      body.appendChild(el);
+    });
+  }
+
+  else if (type==='sleep') {
+    title.textContent='💤 睡眠历史';
+    const rows=[];
+    for(let i=0;i<14;i++){
+      const d=new Date(); d.setDate(d.getDate()-i);
+      const k=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      const s=DB.get(`sleep_${k}`,null);
+      if(s&&(s.sleep||s.wake))rows.push({date:k,...s});
+    }
+    if(!rows.length){body.innerHTML='<p style="color:var(--ink4);font-size:12px;padding:8px 0">暂无睡眠记录</p>';return;}
+    rows.forEach(r=>{
+      const d=document.createElement('div'); d.className='arc-item';
+      d.innerHTML=`<span style="color:var(--ink2)">${r.date}</span><span style="font-size:11px;color:var(--ink4)">🌙${r.sleep||'—'}  ☀️${r.wake||'—'}</span>`;
+      body.appendChild(d);
+    });
+  }
+
+  else if (type==='pomo') {
+    title.textContent='🍅 专注记录';
+    const recs=DB.get('pomo_recs',[]);
+    if(!recs.length){body.innerHTML='<p style="color:var(--ink4);font-size:12px;padding:8px 0">暂无专注记录</p>';return;}
+    let lastD='';
+    recs.slice(0,60).forEach(r=>{
+      if(r.date!==lastD){
+        const s=document.createElement('div'); s.className='arc-section-title'; s.style.marginTop='8px';
+        s.textContent=r.date; body.appendChild(s); lastD=r.date;
+      }
+      const d=document.createElement('div'); d.className='arc-item';
+      d.innerHTML=`<span style="color:var(--ink2)">🍅 ${r.name}</span><span class="arc-time">${r.dur} · ${r.end}</span>`;
+      body.appendChild(d);
+    });
+  }
+
+  else if (type==='mood') {
+    title.textContent='🌈 心情历史';
+    const arc=DB.get('mood_arc',[]).reverse();
+    if(!arc.length){body.innerHTML='<p style="color:var(--ink4);font-size:12px;padding:8px 0">暂无心情记录</p>';return;}
+    arc.slice(0,30).forEach(m=>{
+      const d=document.createElement('div'); d.className='arc-item';
+      d.innerHTML=`<span style="color:var(--ink2)">${m.emoji} ${m.label}</span><span class="arc-time">${m.date}</span>`;
+      body.appendChild(d);
+    });
+  }
+
+  else { // all
+    title.textContent='📂 归档中心';
+    const links=[
+      {k:'todo',l:'📋 今日已完成'},
+      {k:'goals',l:'🎯 已达成目标'},
+      {k:'diary',l:'🖊️ 日记历史'},
+      {k:'sleep',l:'💤 睡眠记录'},
+      {k:'pomo',l:'🍅 专注记录'},
+      {k:'mood',l:'🌈 心情历史'},
+    ];
+    body.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:8px;padding-top:4px">'+
+      links.map(({k,l})=>`<button class="btn btn-primary" style="font-size:12px;padding:6px 12px" onclick="openArc('${k}')">${l}</button>`).join('')+
+    '</div>';
+  }
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+function init() {
+  checkReset();
+  renderDate();
+  renderClock();
+  renderProgress();
+  fetchWeather();
+
+  renderHabits();
+  renderTodos();
+  ['week','month','year'].forEach(renderGoals);
+  renderEvents();
+  renderMood();
+  loadDiary();
+  loadSleep();
+  renderPomoHistory();
+
+  // iPhone sleep quick access via URL hash
+  if (location.hash==='#sleep') {
+    openOverlay('sleepQuickOverlay');
+    history.replaceState(null,'',location.pathname);
+  }
+
+  // register service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+}
+
+init();
+</script>
+</body>
+</html>
