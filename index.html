@@ -244,6 +244,40 @@ body {
    ============================================================ */
 .check-list { display: flex; flex-direction: column; }
 
+/* Scrollable list areas */
+.card .check-list {
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.sb-section .check-list {
+  max-height: 180px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+/* Goal tab panels */
+.tab-panel .check-list {
+  max-height: 200px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+/* Pomo history */
+.pomo-history {
+  max-height: 80px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+/* Event list */
+#eventList {
+  max-height: 130px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 .check-item {
   display: flex;
   align-items: center;
@@ -378,7 +412,7 @@ body {
 }
 .pomo-display.running { color: var(--red); }
 .pomo-controls { display: flex; gap: 8px; justify-content: center; margin-top: 6px; }
-.pomo-history { margin-top: 7px; max-height: 70px; overflow-y: auto; }
+.pomo-history { margin-top: 7px; }
 .pomo-rec {
   font-size: 10.5px; color: var(--ink3); padding: 3px 0;
   border-bottom: 1px dotted var(--paper3);
