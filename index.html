@@ -558,7 +558,6 @@ body {
   .sidebar {
     border-right: none;
     border-bottom: 1.5px solid var(--paper3);
-    /* sidebar becomes horizontal scroll strip on phone */
     flex-direction: row;
     overflow-x: auto;
     overflow-y: hidden;
@@ -571,6 +570,17 @@ body {
   .phone-banner { display: block; }
   .date-main { font-size: 22px; }
   .clock-time { font-size: 30px; }
+
+  /* 手机上各列表高度限制 + 滚动 */
+  .card .check-list        { max-height: 160px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .tab-panel .check-list   { max-height: 150px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  #eventList               { max-height: 110px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .pomo-history            { max-height: 70px;  overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+  /* 手机上 card-body 不要无限撑高 */
+  .card-body               { max-height: 320px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  /* 目标 tab panel 整体也限高 */
+  .tab-panel               { max-height: 260px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 }
 
 textarea, input { -webkit-appearance: none; }
