@@ -244,10 +244,22 @@ body {
    ============================================================ */
 .check-list { display: flex; flex-direction: column; }
 
+
+/* Scrollable hint — subtle gradient fade at bottom of lists */
+.check-list-wrap {
+  position: relative;
+}
+/* Force scroll on iOS by using 'scroll' not 'auto' */
+.card .check-list,
+.tab-panel .check-list,
+#eventList {
+  overflow-y: scroll;
+}
+
 /* Scrollable list areas */
 .card .check-list {
   max-height: 220px;
-  overflow-y: auto;
+  overflow-y: scroll;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
@@ -571,16 +583,35 @@ body {
   .date-main { font-size: 22px; }
   .clock-time { font-size: 30px; }
 
-  /* 手机上各列表高度限制 + 滚动 */
-  .card .check-list        { max-height: 160px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  .tab-panel .check-list   { max-height: 150px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  #eventList               { max-height: 110px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  .pomo-history            { max-height: 70px;  overflow-y: auto; -webkit-overflow-scrolling: touch; }
-
-  /* 手机上 card-body 不要无限撑高 */
-  .card-body               { max-height: 320px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  /* 目标 tab panel 整体也限高 */
-  .tab-panel               { max-height: 260px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  /* 手机列表滚动 */
+  /* 关键：card-body 本身不能撑高，check-list 才能触发 max-height */
+  .card-body {
+    display: flex;
+    flex-direction: column;
+  }
+  .card .check-list,
+  .tab-panel .check-list {
+    height: 160px;       /* 固定高度，不用 max-height */
+    min-height: 60px;
+    overflow-y: scroll !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    border: 1px solid var(--paper3);
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin-bottom: 4px;
+    flex-shrink: 0;
+  }
+  #eventList {
+    height: 110px;
+    overflow-y: scroll !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .pomo-history {
+    max-height: 18vh;
+    overflow-y: scroll !important;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 textarea, input { -webkit-appearance: none; }
@@ -971,21 +1002,35 @@ const DB = {
       );
       if (!res.ok) return;
       const rows = await res.json();
-      let updated = 0;
+      // 无条件以云端为准，覆盖本地（防止 Safari 清掉 localStorage 后本地空数据覆盖云端）
       rows.forEach(row => {
         try {
-          const cloudTs = new Date(row.updated_at).getTime();
-          const localTs = parseInt(localStorage.getItem('_ts_' + row.key) || '0');
-          if (cloudTs > localTs) {
-            localStorage.setItem(row.key, row.value);
-            localStorage.setItem('_ts_' + row.key, cloudTs);
-            updated++;
-          }
+          localStorage.setItem(row.key, row.value);
+          localStorage.setItem('_ts_' + row.key, new Date(row.updated_at).getTime());
         } catch(e) {}
       });
-      if (updated > 0) { renderAll(); }
       showSyncBadge();
-    } catch(e) {}
+    } catch(e) {
+      console.warn('Cloud sync failed, using local data');
+    }
+  },
+
+  // Push ALL local data to Supabase (call when coming back online)
+  async pushAll() {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k.startsWith('_ts_')) keys.push(k);
+    }
+    for (const key of keys) {
+      try {
+        const val = localStorage.getItem(key);
+        if (val) await fetch(SUPA_URL + '/rest/v1/data', {
+          method: 'POST', headers: SUPA_HDR,
+          body: JSON.stringify({ key, value: val, updated_at: new Date().toISOString() })
+        });
+      } catch(e) {}
+    }
   }
 };
 
@@ -1099,14 +1144,17 @@ function fetchWeather() {
 function checkReset() {
   const last = DB.get('last_reset','');
   if (last === TODAY) return;
-  // 只在早上7点之后才重置（避免凌晨还在用时误重置）
   const hour = new Date().getHours();
-  if (hour < 7) return; // 7点前不重置
-  // reset habits
+  if (hour < 7) return;
+  // 只重置勾选状态，不推送到云端（避免本地空数据覆盖云端真实数据）
   const habits = DB.get('habits',[]);
-  habits.forEach(h=>{ h.done=false; h.doneAt=null; });
-  DB.set('habits', habits);
-  DB.set('last_reset', TODAY);
+  if (habits.length > 0) {
+    // 只有本地有数据时才重置并同步，否则等 pullAll 拿回数据
+    habits.forEach(h=>{ h.done=false; h.doneAt=null; });
+    DB.set('habits', habits);
+  }
+  // last_reset 只存本地，不推云端
+  try { localStorage.setItem('last_reset', JSON.stringify(TODAY)); } catch(e) {}
 }
 
 /* ============================================================
@@ -1175,19 +1223,66 @@ function confirmAddHabit() {
 /* ============================================================
    TODO
    ============================================================ */
+function getAllActiveTodos() {
+  // Collect undone todos from today + past 30 days
+  const all = [];
+  for (let i = 0; i < 30; i++) {
+    const d = new Date();
+    if (new Date().getHours() < 7) d.setDate(d.getDate() - 1);
+    d.setDate(d.getDate() - i);
+    const k = `todos_${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const todos = DB.get(k, []);
+    todos.filter(t => !t.done).forEach(t => {
+      // attach the date key for completion purposes
+      all.push({...t, _key: k});
+    });
+  }
+  // Deduplicate by id
+  const seen = new Set();
+  return all.filter(t => { if (seen.has(t.id)) return false; seen.add(t.id); return true; });
+}
+
+function todayOverdueDays(t) {
+  const created = t.created || TODAY;
+  const [cy,cm,cd] = created.split('-').map(Number);
+  const [ty,tm,td] = TODAY.split('-').map(Number);
+  const a = new Date(cy,cm-1,cd), b = new Date(ty,tm-1,td);
+  return Math.round((b-a)/(864e5));
+}
+
 function renderTodos() {
-  const todos = DB.get(`todos_${TODAY}`,[]);
+  const active = getAllActiveTodos();
   const el = document.getElementById('todoList');
   el.innerHTML='';
-  const active = todos.filter(t=>!t.done);
   if (!active.length) {
     el.innerHTML='<div style="font-size:11px;color:var(--ink4);padding:4px 0">今日任务已全部完成 🎉</div>';
+    return;
   }
-  active.forEach(t=>{
-    const div=document.createElement('div');
-    div.className='check-item';
-    div.innerHTML=`<div class="check-box" onclick="completeTodo(${t.id})"></div><div class="check-text">${escHtml(t.text)}</div><div class="check-meta" style="font-size:10px;color:var(--ink4)">长按编辑</div>`;
-    attachLongPress(div, ()=>showTodoMenu(t.id));
+  // Sort: today's first, then by overdue days desc
+  active.sort((a,b) => todayOverdueDays(a) - todayOverdueDays(b));
+  active.forEach(t => {
+    const days = todayOverdueDays(t);
+    const div = document.createElement('div');
+    div.className = 'check-item';
+    // Color tint based on overdue days
+    let bgColor = 'transparent';
+    let textColor = 'var(--ink2)';
+    if (days === 1) {
+      bgColor = 'rgba(192,57,43,0.04)';
+      textColor = '#8b3a2a';
+    } else if (days === 2) {
+      bgColor = 'rgba(192,57,43,0.09)';
+      textColor = '#7a2820';
+    } else if (days >= 3) {
+      bgColor = 'rgba(192,57,43,0.16)';
+      textColor = '#6b1f18';
+    }
+    div.style.background = bgColor;
+    div.style.borderRadius = '4px';
+    div.style.marginBottom = '1px';
+    const createdLabel = t.created || '';
+    div.innerHTML = `<div class="check-box" onclick="completeTodoByKey('${t._key}',${t.id})"></div><div class="check-text" style="color:${textColor}">${escHtml(t.text)}</div><div class="check-meta" style="font-size:9px;color:var(--ink4);white-space:nowrap">${createdLabel}</div>`;
+    attachLongPress(div, () => showTodoMenuByKey(t._key, t.id));
     el.appendChild(div);
   });
 }
@@ -1197,17 +1292,51 @@ function addTodo() {
   const val = inp.value.trim();
   if (!val) return;
   const todos = DB.get(`todos_${TODAY}`,[]);
-  todos.push({id:Date.now(), text:val, done:false, doneAt:null});
+  todos.push({id:Date.now(), text:val, done:false, doneAt:null, created:TODAY});
   DB.set(`todos_${TODAY}`, todos);
   inp.value='';
   renderTodos();
 }
 
 function completeTodo(id) {
-  const todos = DB.get(`todos_${TODAY}`,[]);
+  completeTodoByKey(`todos_${TODAY}`, id);
+}
+
+function completeTodoByKey(key, id) {
+  const todos = DB.get(key,[]);
   const t = todos.find(t=>t.id===id);
   if (t) { t.done=true; t.doneAt=fullTS(); }
-  DB.set(`todos_${TODAY}`, todos);
+  DB.set(key, todos);
+  renderTodos();
+}
+
+function showTodoMenuByKey(key, id) {
+  const todos = DB.get(key,[]);
+  const t = todos.find(t=>t.id===id);
+  if (!t) return;
+  showCtxMenu(window.innerWidth/2-90, window.innerHeight/2-70, [
+    { icon:'✏️', label:'编辑', action: ()=>editTodoByKey(key, id) },
+    { icon:'✅', label:'标记完成', action: ()=>completeTodoByKey(key, id) },
+    { icon:'🗑️', label:'删除', danger:true, action: ()=>deleteTodoByKey(key, id) },
+  ]);
+}
+
+function editTodoByKey(key, id) {
+  const todos = DB.get(key,[]);
+  const t = todos.find(t=>t.id===id);
+  if (!t) return;
+  showEditPrompt('编辑任务', t.text, newText => {
+    t.text = newText;
+    DB.set(key, todos);
+    renderTodos();
+  });
+}
+
+function deleteTodoByKey(key, id) {
+  const todos = DB.get(key,[]);
+  const idx = todos.findIndex(t=>t.id===id);
+  if (idx>=0) todos.splice(idx,1);
+  DB.set(key, todos);
   renderTodos();
 }
 
@@ -1221,14 +1350,57 @@ function switchGoal(tab, btn) {
   document.getElementById('gp-'+tab).classList.add('active');
 }
 
+// 计算目标逾期天数（相对于创建日期）
+function goalOverdueDays(g, tab) {
+  if (!g.created) return 0;
+  const createdDate = g.created.slice(0,10); // "YYYY-MM-DD"
+  const [cy,cm,cd] = createdDate.split('-').map(Number);
+  const [ty,tm,td] = TODAY.split('-').map(Number);
+  return Math.round((new Date(ty,tm-1,td) - new Date(cy,cm-1,cd)) / 864e5);
+}
+
+function goalBgColor(days, tab) {
+  const limit = { week: 7, month: 30, year: 365 }[tab];
+  const ratio = days / limit;
+  if (ratio < 1) return 'transparent';
+  if (ratio < 2) return 'rgba(192,57,43,0.04)';
+  if (ratio < 3) return 'rgba(192,57,43,0.09)';
+  return 'rgba(192,57,43,0.16)';
+}
+
+function goalTextColor(days, tab) {
+  const limit = { week: 7, month: 30, year: 365 }[tab];
+  const ratio = days / limit;
+  if (ratio < 1) return 'var(--ink2)';
+  if (ratio < 2) return '#8b3a2a';
+  if (ratio < 3) return '#7a2820';
+  return '#6b1f18';
+}
+
 function renderGoals(tab) {
   const goals = DB.get(`goals_${tab}`,[]);
   const el = document.getElementById('gl-'+tab);
   el.innerHTML='';
-  goals.filter(g=>!g.done).forEach(g=>{
+  const active = goals.filter(g=>!g.done);
+  if (!active.length) {
+    el.innerHTML='<div style="font-size:11px;color:var(--ink4);padding:4px 0">暂无目标，添加一个吧</div>';
+    return;
+  }
+  active.forEach(g=>{
+    const days = goalOverdueDays(g, tab);
+    const createdLabel = g.created ? g.created.slice(0,10) : '';
     const div=document.createElement('div');
     div.className='check-item';
-    div.innerHTML=`<div class="check-box" onclick="completeGoal('${tab}',${g.id})"></div><div class="check-text">${escHtml(g.text)}</div><div class="check-meta" style="font-size:10px;color:var(--ink4)">长按编辑</div>`;
+    div.style.background = goalBgColor(days, tab);
+    div.style.borderRadius = '4px';
+    div.style.marginBottom = '1px';
+    div.innerHTML=`
+      <div class="check-box" onclick="completeGoal('${tab}',${g.id})"></div>
+      <div class="check-text" style="color:${goalTextColor(days,tab)}">
+        ${escHtml(g.text)}
+      </div>
+      <div class="check-meta" style="font-size:9px;color:var(--ink4);white-space:nowrap">${createdLabel}</div>
+    `;
     attachLongPress(div, ()=>showGoalMenu(tab, g.id));
     el.appendChild(div);
   });
@@ -1643,33 +1815,7 @@ function closeCtxMenu() {
 
 /* ── TODO menu ── */
 function showTodoMenu(id) {
-  const todos = DB.get(`todos_${TODAY}`,[]);
-  const t = todos.find(t=>t.id===id);
-  if (!t) return;
-  showCtxMenu(window.innerWidth/2 - 90, window.innerHeight/2 - 70, [
-    { icon:'✏️', label:'编辑', action: ()=>editTodo(id) },
-    { icon:'✅', label:'标记完成', action: ()=>completeTodo(id) },
-    { icon:'🗑️', label:'删除', danger:true, action: ()=>deleteTodo(id) },
-  ]);
-}
-
-function editTodo(id) {
-  const todos = DB.get(`todos_${TODAY}`,[]);
-  const t = todos.find(t=>t.id===id);
-  if (!t) return;
-  showEditPrompt('编辑任务', t.text, newText => {
-    t.text = newText;
-    DB.set(`todos_${TODAY}`, todos);
-    renderTodos();
-  });
-}
-
-function deleteTodo(id) {
-  const todos = DB.get(`todos_${TODAY}`,[]);
-  const idx = todos.findIndex(t=>t.id===id);
-  if (idx>=0) todos.splice(idx,1);
-  DB.set(`todos_${TODAY}`, todos);
-  renderTodos();
+  showTodoMenuByKey(`todos_${TODAY}`, id);
 }
 
 /* ── GOAL menu ── */
@@ -2115,15 +2261,20 @@ function showSyncBadge() {
 }
 
 function init() {
-  checkReset();
   renderDate();
   renderClock();
   renderProgress();
   fetchWeather();
 
-  // Sync from cloud (pulls latest data from Supabase, merges with local)
-  DB.pullAll();
+  // 先从云端拉数据，拉完之后再重置+渲染
+  // 避免本地空数据在 pullAll 之前被推送到云端覆盖真实数据
+  DB.pullAll().then(() => {
+    checkReset();
+    renderAll();
+  });
 
+  // 同时用本地数据先渲染一次（有就显示，没有等云端回来）
+  checkReset();
   renderHabits();
   renderTodos();
   ['week','month','year'].forEach(renderGoals);
