@@ -710,13 +710,13 @@ textarea, input { -webkit-appearance: none; }
         <div class="sleep-grid">
           <div class="sleep-block">
             <div class="sleep-lbl">入睡时间</div>
-            <div class="sleep-btn" id="sleepBtn">
+            <div class="sleep-btn" id="sleepBtn" onclick="tapSleep('sleep')">
               <span id="sleepTxt">记录 🌙</span>
             </div>
           </div>
           <div class="sleep-block">
             <div class="sleep-lbl">起床时间</div>
-            <div class="sleep-btn" id="wakeBtn">
+            <div class="sleep-btn" id="wakeBtn" onclick="tapSleep('wake')">
               <span id="wakeTxt">记录 ☀️</span>
             </div>
           </div>
@@ -1525,51 +1525,29 @@ function loadSleep() {
   const sleepBtn = document.getElementById('sleepBtn');
   const wakeBtn  = document.getElementById('wakeBtn');
 
-  // 入睡按钮
-  if (s.sleep) {
-    document.getElementById('sleepTxt').textContent = '🌙 ' + s.sleep;
-    sleepBtn.classList.add('recorded');
-  } else {
-    document.getElementById('sleepTxt').textContent = '记录 🌙';
-    sleepBtn.classList.remove('recorded');
-  }
-
-  // 起床按钮
-  if (s.wake) {
-    document.getElementById('wakeTxt').textContent = '☀️ ' + s.wake;
-    wakeBtn.classList.add('recorded');
-  } else {
-    document.getElementById('wakeTxt').textContent = '记录 ☀️';
-    wakeBtn.classList.remove('recorded');
-  }
+  document.getElementById('sleepTxt').textContent = s.sleep ? '🌙 ' + s.sleep : '记录 🌙';
+  document.getElementById('wakeTxt').textContent  = s.wake  ? '☀️ ' + s.wake  : '记录 ☀️';
+  sleepBtn.classList.toggle('recorded', !!s.sleep);
+  wakeBtn.classList.toggle('recorded',  !!s.wake);
 
   updateSleepDur(s);
 
-  // 重新绑定：单击记录（未记录时），长按始终可修改
-  sleepBtn.onclick = () => { if (!DB.get(`sleep_${TODAY}`,{}).sleep) recordSleep(); };
-  wakeBtn.onclick  = () => { if (!DB.get(`sleep_${TODAY}`,{}).wake)  recordWake();  };
+  // 长按始终可修改（无论是否已记录）
   attachLongPress(sleepBtn, () => openSleepEdit('sleep'));
   attachLongPress(wakeBtn,  () => openSleepEdit('wake'));
 }
-function recordSleep() {
+// 单击：未记录则记录当前时间；已记录则弹出修改
+function tapSleep(field) {
   const s = DB.get(`sleep_${TODAY}`,{});
-  if (s.sleep) {
-    // 已记录，单击不重复记录，长按可修改（由attachLongPress处理）
-    return;
+  if (!s[field]) {
+    s[field] = hhmm();
+    DB.set(`sleep_${TODAY}`, s);
+    loadSleep();
   }
-  s.sleep = hhmm();
-  DB.set(`sleep_${TODAY}`, s);
-  loadSleep();
+  // 已记录时单击无效，长按修改
 }
-function recordWake() {
-  const s = DB.get(`sleep_${TODAY}`,{});
-  if (s.wake) {
-    return;
-  }
-  s.wake = hhmm();
-  DB.set(`sleep_${TODAY}`, s);
-  loadSleep();
-}
+function recordSleep() { tapSleep('sleep'); }
+function recordWake()  { tapSleep('wake');  }
 
 let _sleepEditField = null; // 'sleep' or 'wake'
 
