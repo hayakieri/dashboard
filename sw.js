@@ -3,7 +3,7 @@
    v8 — 强制清除旧缓存
    ============================================================ */
 
-const CACHE = 'dashboard-v8';
+const CACHE = 'dashboard-v9';
 const STATIC = [
   './',
   './index.html',

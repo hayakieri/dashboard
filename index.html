@@ -217,7 +217,6 @@ body {
   border-radius: 7px;
   border: 1px solid var(--paper2);
   box-shadow: 2px 3px 0 var(--paper3), 0 2px 8px var(--shadow);
-  overflow: hidden;
 }
 .card-header {
   padding: 8px 13px 7px;
@@ -236,38 +235,23 @@ body {
 }
 .card-body { padding: 8px 13px 11px; }
 
-/* 卡片内部布局：列表超过最大高度才滚动，输入框始终可见 */
-.card-body.scrollable {
-  display: flex;
-  flex-direction: column;
-  padding-bottom: 0;
-}
-.card-body.scrollable .scroll-list {
+/* 列表超高时滚动，输入框始终可见 */
+.scroll-list {
   max-height: 200px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  padding-bottom: 4px;
 }
-.card-body.scrollable .add-row {
-  flex-shrink: 0;
-  margin-top: 0;
-  padding: 7px 0 8px;
-  border-top: 1px dashed var(--paper3);
-}
-.card-body.scrollable .tab-row {
-  flex-shrink: 0;
-}
-/* goal tab panels */
-.card-body.scrollable .tab-panel .check-list {
+.tab-panel .check-list {
   max-height: 180px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
-.card-body.scrollable .tab-panel .add-row {
-  flex-shrink: 0;
-  margin-top: 0;
-  padding: 7px 0 8px;
+.card-body .add-row {
+  margin-top: 6px;
+  padding-top: 7px;
+  border-top: 1px dashed var(--paper3);
 }
 
 /* two-col inside main area */
@@ -1541,33 +1525,31 @@ function loadSleep() {
   const sleepBtn = document.getElementById('sleepBtn');
   const wakeBtn  = document.getElementById('wakeBtn');
 
+  // 入睡按钮
   if (s.sleep) {
-    document.getElementById('sleepTxt').textContent = '🌙 '+s.sleep;
+    document.getElementById('sleepTxt').textContent = '🌙 ' + s.sleep;
     sleepBtn.classList.add('recorded');
-    sleepBtn.title = '长按修改';
-    sleepBtn.onclick = null; // 已记录，单击无效
   } else {
     document.getElementById('sleepTxt').textContent = '记录 🌙';
     sleepBtn.classList.remove('recorded');
-    sleepBtn.onclick = recordSleep;
   }
 
+  // 起床按钮
   if (s.wake) {
-    document.getElementById('wakeTxt').textContent = '☀️ '+s.wake;
+    document.getElementById('wakeTxt').textContent = '☀️ ' + s.wake;
     wakeBtn.classList.add('recorded');
-    wakeBtn.title = '长按修改';
-    wakeBtn.onclick = null;
   } else {
     document.getElementById('wakeTxt').textContent = '记录 ☀️';
     wakeBtn.classList.remove('recorded');
-    wakeBtn.onclick = recordWake;
   }
 
-  // 长按已记录的按钮可修改
+  updateSleepDur(s);
+
+  // 重新绑定：单击记录（未记录时），长按始终可修改
+  sleepBtn.onclick = () => { if (!DB.get(`sleep_${TODAY}`,{}).sleep) recordSleep(); };
+  wakeBtn.onclick  = () => { if (!DB.get(`sleep_${TODAY}`,{}).wake)  recordWake();  };
   attachLongPress(sleepBtn, () => openSleepEdit('sleep'));
   attachLongPress(wakeBtn,  () => openSleepEdit('wake'));
-
-  updateSleepDur(s);
 }
 function recordSleep() {
   const s = DB.get(`sleep_${TODAY}`,{});
