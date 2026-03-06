@@ -236,17 +236,13 @@ body {
 .card-body { padding: 8px 13px 11px; }
 
 /* 列表超高时滚动，输入框始终可见 */
-.scroll-list {
-  max-height: 200px;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-}
+
 .tab-panel .check-list {
   max-height: 180px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  min-height: 0;
 }
 .card-body .add-row {
   margin-top: 6px;
@@ -752,11 +748,9 @@ textarea, input { -webkit-appearance: none; }
           <div class="card-title"><span>✏️</span> 今日 Todo</div>
           <button class="btn btn-sm" onclick="openArc('todo')">已完成</button>
         </div>
-        <div class="card-body scrollable">
-          <div class="scroll-list">
-            <div class="check-list" id="todoList"></div>
-          </div>
-          <div class="add-row">
+        <div class="card-body">
+          <div class="check-list" id="todoList" style="max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
+          <div class="add-row" style="margin-top:6px;padding-top:7px;border-top:1px dashed var(--paper3)">
             <input class="add-input" id="todoInput" placeholder="添加今日任务…" onkeydown="if(event.key==='Enter')addTodo()">
             <button class="btn btn-primary" onclick="addTodo()">添加</button>
           </div>
@@ -2375,5 +2369,19 @@ init();
   </div>
 </div>
 
+
+<!-- SLEEP EDIT MODAL -->
+<div class="overlay" id="sleepEditOverlay" onclick="if(event.target===this)closeOverlay('sleepEditOverlay')">
+  <div class="prompt-box">
+    <h3 id="sleepEditTitle">修改时间</h3>
+    <input type="time" id="sleepEditInput" class="prompt-input"
+      style="font-size:28px;text-align:center;padding:12px;width:100%;box-sizing:border-box;
+             border:1px solid var(--paper3);border-radius:8px;background:var(--paper2);color:var(--ink)">
+    <div class="prompt-actions">
+      <button class="btn btn-primary btn-big" onclick="confirmSleepEdit()">确认</button>
+      <button class="btn btn-gray btn-big" onclick="closeOverlay('sleepEditOverlay')">取消</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
