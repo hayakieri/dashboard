@@ -710,13 +710,13 @@ textarea, input { -webkit-appearance: none; }
         <div class="sleep-grid">
           <div class="sleep-block">
             <div class="sleep-lbl">入睡时间</div>
-            <div class="sleep-btn" id="sleepBtn" onclick="recordSleep()">
+            <div class="sleep-btn" id="sleepBtn">
               <span id="sleepTxt">记录 🌙</span>
             </div>
           </div>
           <div class="sleep-block">
             <div class="sleep-lbl">起床时间</div>
-            <div class="sleep-btn" id="wakeBtn" onclick="recordWake()">
+            <div class="sleep-btn" id="wakeBtn">
               <span id="wakeTxt">记录 ☀️</span>
             </div>
           </div>
@@ -2046,11 +2046,12 @@ function toggleReviewMonth(ym, hdr) {
 
 function renderMonthDetail(ym, container) {
   const tabs = [
-    {id:'diary', label:'🖊️ 日记'},
-    {id:'mood',  label:'🌈 心情'},
-    {id:'sleep', label:'💤 睡眠'},
-    {id:'pomo',  label:'🍅 专注'},
-    {id:'todo',  label:'✅ 任务'},
+    {id:'diary',  label:'🖊️ 日记'},
+    {id:'mood',   label:'🌈 心情'},
+    {id:'habits', label:'🔄 习惯'},
+    {id:'sleep',  label:'💤 睡眠'},
+    {id:'pomo',   label:'🍅 专注'},
+    {id:'todo',   label:'✅ 任务'},
   ];
 
   // tab bar
@@ -2148,6 +2149,31 @@ function renderMonthPanel(ym, type, el) {
         const row = document.createElement('div');
         row.className = 'arc-item';
         row.innerHTML = `<span style="color:var(--ink2);flex:1">🍅 ${escHtml(r.name)}</span><span class="arc-time">${r.dur}</span>`;
+        el.appendChild(row);
+      });
+    });
+  }
+
+  else if (type === 'habits') {
+    // Collect all days in month that have habit completions
+    const habitNames = DB.get('habits', []).map(h => h.name);
+    const rows = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${ym}-${pad(day)}`;
+      const arc = DB.get(`harc_${dateStr}`, []);
+      if (arc.length) rows.push({date: dateStr, items: arc});
+    }
+    if (!rows.length) { el.innerHTML = noData('本月无习惯打卡记录'); return; }
+    rows.reverse().forEach(r => {
+      const sec = document.createElement('div');
+      sec.className = 'arc-section-title';
+      sec.style.marginTop = '8px';
+      sec.textContent = `${r.date} ${dowLabel(r.date)}`;
+      el.appendChild(sec);
+      r.items.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'arc-item';
+        row.innerHTML = `<span style="color:var(--ink2);flex:1">✓ ${escHtml(item.name)}</span><span class="arc-time">${item.ts ? item.ts.slice(11,16) : ''}</span>`;
         el.appendChild(row);
       });
     });
