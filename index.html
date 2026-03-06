@@ -1538,31 +1538,76 @@ function saveDiary() {
    ============================================================ */
 function loadSleep() {
   const s = DB.get(`sleep_${TODAY}`,{});
+  const sleepBtn = document.getElementById('sleepBtn');
+  const wakeBtn  = document.getElementById('wakeBtn');
+
   if (s.sleep) {
     document.getElementById('sleepTxt').textContent = '🌙 '+s.sleep;
-    document.getElementById('sleepBtn').classList.add('recorded');
+    sleepBtn.classList.add('recorded');
+    sleepBtn.title = '长按修改';
+    sleepBtn.onclick = null; // 已记录，单击无效
+  } else {
+    document.getElementById('sleepTxt').textContent = '记录 🌙';
+    sleepBtn.classList.remove('recorded');
+    sleepBtn.onclick = recordSleep;
   }
+
   if (s.wake) {
     document.getElementById('wakeTxt').textContent = '☀️ '+s.wake;
-    document.getElementById('wakeBtn').classList.add('recorded');
+    wakeBtn.classList.add('recorded');
+    wakeBtn.title = '长按修改';
+    wakeBtn.onclick = null;
+  } else {
+    document.getElementById('wakeTxt').textContent = '记录 ☀️';
+    wakeBtn.classList.remove('recorded');
+    wakeBtn.onclick = recordWake;
   }
+
+  // 长按已记录的按钮可修改
+  attachLongPress(sleepBtn, () => openSleepEdit('sleep'));
+  attachLongPress(wakeBtn,  () => openSleepEdit('wake'));
+
   updateSleepDur(s);
 }
 function recordSleep() {
   const s = DB.get(`sleep_${TODAY}`,{});
+  if (s.sleep) {
+    // 已记录，单击不重复记录，长按可修改（由attachLongPress处理）
+    return;
+  }
   s.sleep = hhmm();
   DB.set(`sleep_${TODAY}`, s);
-  document.getElementById('sleepTxt').textContent = '🌙 '+s.sleep;
-  document.getElementById('sleepBtn').classList.add('recorded');
-  updateSleepDur(s);
+  loadSleep();
 }
 function recordWake() {
   const s = DB.get(`sleep_${TODAY}`,{});
+  if (s.wake) {
+    return;
+  }
   s.wake = hhmm();
   DB.set(`sleep_${TODAY}`, s);
-  document.getElementById('wakeTxt').textContent = '☀️ '+s.wake;
-  document.getElementById('wakeBtn').classList.add('recorded');
-  updateSleepDur(s);
+  loadSleep();
+}
+
+let _sleepEditField = null; // 'sleep' or 'wake'
+
+function openSleepEdit(field) {
+  _sleepEditField = field;
+  const s = DB.get(`sleep_${TODAY}`,{});
+  const cur = s[field] || hhmm();
+  document.getElementById('sleepEditTitle').textContent = field==='sleep' ? '修改入睡时间 🌙' : '修改起床时间 ☀️';
+  document.getElementById('sleepEditInput').value = cur;
+  openOverlay('sleepEditOverlay');
+}
+
+function confirmSleepEdit() {
+  const val = document.getElementById('sleepEditInput').value;
+  if (!val) return;
+  const s = DB.get(`sleep_${TODAY}`,{});
+  s[_sleepEditField] = val;
+  DB.set(`sleep_${TODAY}`, s);
+  closeOverlay('sleepEditOverlay');
+  loadSleep();
 }
 function updateSleepDur(s) {
   if (!s.sleep||!s.wake) return;
