@@ -395,6 +395,8 @@ body {
 .sleep-block { display: flex; flex-direction: column; gap: 2px; }
 .sleep-lbl { font-size: 9px; color: var(--ink4); letter-spacing: 1.5px; }
 .sleep-btn {
+  -webkit-user-select: none;
+  user-select: none;
   background: var(--paper2); border: 1px solid var(--paper3);
   border-radius: 5px; padding: 6px 4px;
   font-size: 13px; font-family: 'Caveat', cursive; color: var(--ink2);
@@ -1532,7 +1534,9 @@ function loadSleep() {
 
   updateSleepDur(s);
 
-  // 长按始终可修改（无论是否已记录）
+  // 长按始终可修改（重置标记避免重复绑定）
+  sleepBtn._lpAttached = false;
+  wakeBtn._lpAttached  = false;
   attachLongPress(sleepBtn, () => openSleepEdit('sleep'));
   attachLongPress(wakeBtn,  () => openSleepEdit('wake'));
 }
@@ -1774,17 +1778,38 @@ function openArc(type) {
    LONG PRESS
    ============================================================ */
 function attachLongPress(el, cb) {
+  // Remove previous listeners by cloning (prevents stacking on repeated calls)
+  if (el._lpAttached) return;
+  el._lpAttached = true;
+
   let timer, moved = false;
-  const start = e => { moved=false; timer = setTimeout(()=>{ if(!moved){ navigator.vibrate&&navigator.vibrate(30); cb(); } }, 500); };
+  const start = e => {
+    moved = false;
+    timer = setTimeout(() => {
+      if (!moved) {
+        navigator.vibrate && navigator.vibrate(30);
+        cb();
+      }
+    }, 500);
+  };
   const cancel = () => clearTimeout(timer);
-  const move = () => { moved=true; clearTimeout(timer); };
-  el.addEventListener('touchstart', start, {passive:true});
-  el.addEventListener('touchend', cancel);
-  el.addEventListener('touchmove', move, {passive:true});
+  const move = () => { moved = true; clearTimeout(timer); };
+
+  // passive:false so we can prevent default (stops text selection)
+  el.addEventListener('touchstart', e => {
+    // prevent long-press text selection on iOS
+    e.target.style.webkitUserSelect = 'none';
+    start(e);
+  }, {passive: false});
+  el.addEventListener('touchend', e => {
+    e.target.style.webkitUserSelect = '';
+    cancel();
+  });
+  el.addEventListener('touchmove', move, {passive: true});
   el.addEventListener('mousedown', start);
   el.addEventListener('mouseup', cancel);
   el.addEventListener('mousemove', move);
-  el.addEventListener('contextmenu', e=>{ e.preventDefault(); cb(); });
+  el.addEventListener('contextmenu', e => { e.preventDefault(); cb(); });
 }
 
 function escHtml(s) {
