@@ -236,6 +236,52 @@ body {
 }
 .card-body { padding: 8px 13px 11px; }
 
+/* 卡片内部布局：列表滚动，输入框固定底部 */
+.card-body.scrollable {
+  display: flex;
+  flex-direction: column;
+  height: 220px; /* 固定卡片内容区高度 */
+  padding-bottom: 0;
+}
+.card-body.scrollable .scroll-list {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  min-height: 0;
+  padding-bottom: 4px;
+}
+.card-body.scrollable .add-row {
+  flex-shrink: 0;
+  margin-top: 0;
+  padding: 7px 0 8px;
+  border-top: 1px dashed var(--paper3);
+}
+.card-body.scrollable .tab-row {
+  flex-shrink: 0;
+}
+/* goal tab panels inside scrollable */
+.card-body.scrollable .tab-panel {
+  flex: 1;
+  display: none;
+  flex-direction: column;
+  min-height: 0;
+}
+.card-body.scrollable .tab-panel.active {
+  display: flex;
+}
+.card-body.scrollable .tab-panel .check-list {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+}
+.card-body.scrollable .tab-panel .add-row {
+  flex-shrink: 0;
+  margin-top: 0;
+  padding: 7px 0 8px;
+}
+
 /* two-col inside main area */
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
 
@@ -256,39 +302,12 @@ body {
   overflow-y: scroll;
 }
 
-/* Scrollable list areas */
-.card .check-list {
-  max-height: 220px;
-  overflow-y: scroll;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
-.sb-section .check-list {
-  max-height: 180px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
-/* Goal tab panels */
-.tab-panel .check-list {
-  max-height: 200px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
-/* Pomo history */
 .pomo-history {
   max-height: 80px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
-/* Event list */
-#eventList {
-  max-height: 130px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
+
 
 .check-item {
   display: flex;
@@ -759,8 +778,10 @@ textarea, input { -webkit-appearance: none; }
           <div class="card-title"><span>✏️</span> 今日 Todo</div>
           <button class="btn btn-sm" onclick="openArc('todo')">已完成</button>
         </div>
-        <div class="card-body">
-          <div class="check-list" id="todoList"></div>
+        <div class="card-body scrollable">
+          <div class="scroll-list">
+            <div class="check-list" id="todoList"></div>
+          </div>
           <div class="add-row">
             <input class="add-input" id="todoInput" placeholder="添加今日任务…" onkeydown="if(event.key==='Enter')addTodo()">
             <button class="btn btn-primary" onclick="addTodo()">添加</button>
@@ -774,7 +795,7 @@ textarea, input { -webkit-appearance: none; }
           <div class="card-title"><span>🎯</span> 目标清单</div>
           <button class="btn btn-sm" onclick="openArc('goals')">已达成</button>
         </div>
-        <div class="card-body">
+        <div class="card-body scrollable" style="height:260px">
           <div class="tab-row">
             <button class="tab active" onclick="switchGoal('week',this)">本周</button>
             <button class="tab" onclick="switchGoal('month',this)">本月</button>
