@@ -823,6 +823,22 @@ textarea, input { -webkit-appearance: none; }
         </div>
       </div>
 
+      <!-- Weight -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span>⚖️</span> 今日体重</div>
+          <button class="btn btn-sm" onclick="openArc('weight')">历史</button>
+        </div>
+        <div class="card-body" style="padding-top:6px;display:flex;align-items:center;gap:10px">
+          <input type="number" id="weightInput" class="add-input"
+            placeholder="输入体重…" step="0.1" min="20" max="300"
+            style="font-size:22px;text-align:center;max-width:140px"
+            oninput="saveWeight()" value="">
+          <span style="font-size:14px;color:var(--ink4)">kg</span>
+          <span id="weightDiff" style="font-size:12px;color:var(--ink4);margin-left:4px"></span>
+        </div>
+      </div>
+
       <!-- Reminders / Events -->
       <div class="card">
         <div class="card-header">
@@ -1135,14 +1151,25 @@ function checkReset() {
   if (last === TODAY) return;
   const hour = new Date().getHours();
   if (hour < 7) return;
-  // 只重置勾选状态，不推送到云端（避免本地空数据覆盖云端真实数据）
+
+  // 切换日期前，把昨天的日记存入归档（防止没点保存就丢失）
+  if (last) {
+    const diaryText = DB.get(`diary_${last}`, '').trim();
+    if (diaryText) {
+      const arc = DB.get('diary_arc', []);
+      const existing = arc.findIndex(d => d.date === last);
+      if (existing >= 0) arc[existing] = {date: last, text: diaryText};
+      else arc.push({date: last, text: diaryText});
+      DB.set('diary_arc', arc);
+    }
+  }
+
+  // 重置习惯
   const habits = DB.get('habits',[]);
   if (habits.length > 0) {
-    // 只有本地有数据时才重置并同步，否则等 pullAll 拿回数据
     habits.forEach(h=>{ h.done=false; h.doneAt=null; });
     DB.set('habits', habits);
   }
-  // last_reset 只存本地，不推云端
   try { localStorage.setItem('last_reset', JSON.stringify(TODAY)); } catch(e) {}
 }
 
@@ -1517,32 +1544,35 @@ function saveDiary() {
    SLEEP
    ============================================================ */
 function loadSleep() {
-  const s = DB.get(`sleep_${TODAY}`,{});
+  // 入睡时间存在昨天的 key，起床时间存在今天的 key
+  const sYest = DB.get(`sleep_${yday()}`, {});
+  const sToday = DB.get(`sleep_${TODAY}`, {});
   const sleepBtn = document.getElementById('sleepBtn');
   const wakeBtn  = document.getElementById('wakeBtn');
 
-  document.getElementById('sleepTxt').textContent = s.sleep ? '🌙 ' + s.sleep : '记录 🌙';
-  document.getElementById('wakeTxt').textContent  = s.wake  ? '☀️ ' + s.wake  : '记录 ☀️';
-  sleepBtn.classList.toggle('recorded', !!s.sleep);
-  wakeBtn.classList.toggle('recorded',  !!s.wake);
+  document.getElementById('sleepTxt').textContent = sYest.sleep ? '🌙 ' + sYest.sleep : '记录 🌙';
+  document.getElementById('wakeTxt').textContent  = sToday.wake ? '☀️ ' + sToday.wake  : '记录 ☀️';
+  sleepBtn.classList.toggle('recorded', !!sYest.sleep);
+  wakeBtn.classList.toggle('recorded',  !!sToday.wake);
 
-  updateSleepDur(s);
+  updateSleepDur({sleep: sYest.sleep, wake: sToday.wake});
 
-  // 长按始终可修改（重置标记避免重复绑定）
   sleepBtn._lpAttached = false;
   wakeBtn._lpAttached  = false;
   attachLongPress(sleepBtn, () => openSleepEdit('sleep'));
   attachLongPress(wakeBtn,  () => openSleepEdit('wake'));
 }
-// 单击：未记录则记录当前时间；已记录则弹出修改
+// 单击：未记录则记录当前时间；已记录单击无效，长按修改
 function tapSleep(field) {
-  const s = DB.get(`sleep_${TODAY}`,{});
-  if (!s[field]) {
-    s[field] = hhmm();
-    DB.set(`sleep_${TODAY}`, s);
-    loadSleep();
+  if (field === 'sleep') {
+    // 入睡时间存到昨天的 key
+    const s = DB.get(`sleep_${yday()}`, {});
+    if (!s.sleep) { s.sleep = hhmm(); DB.set(`sleep_${yday()}`, s); loadSleep(); }
+  } else {
+    // 起床时间存到今天的 key
+    const s = DB.get(`sleep_${TODAY}`, {});
+    if (!s.wake) { s.wake = hhmm(); DB.set(`sleep_${TODAY}`, s); loadSleep(); }
   }
-  // 已记录时单击无效，长按修改
 }
 function recordSleep() { tapSleep('sleep'); }
 function recordWake()  { tapSleep('wake');  }
@@ -1551,7 +1581,9 @@ let _sleepEditField = null; // 'sleep' or 'wake'
 
 function openSleepEdit(field) {
   _sleepEditField = field;
-  const s = DB.get(`sleep_${TODAY}`,{});
+  // 入睡用昨天 key，起床用今天 key
+  const key = field === 'sleep' ? `sleep_${yday()}` : `sleep_${TODAY}`;
+  const s = DB.get(key, {});
   const cur = s[field] || hhmm();
   document.getElementById('sleepEditTitle').textContent = field==='sleep' ? '修改入睡时间 🌙' : '修改起床时间 ☀️';
   document.getElementById('sleepEditInput').value = cur;
@@ -1561,9 +1593,10 @@ function openSleepEdit(field) {
 function confirmSleepEdit() {
   const val = document.getElementById('sleepEditInput').value;
   if (!val) return;
-  const s = DB.get(`sleep_${TODAY}`,{});
+  const key = _sleepEditField === 'sleep' ? `sleep_${yday()}` : `sleep_${TODAY}`;
+  const s = DB.get(key, {});
   s[_sleepEditField] = val;
-  DB.set(`sleep_${TODAY}`, s);
+  DB.set(key, s);
   closeOverlay('sleepEditOverlay');
   loadSleep();
 }
@@ -2047,6 +2080,7 @@ function renderMonthDetail(ym, container) {
     {id:'mood',   label:'🌈 心情'},
     {id:'habits', label:'🔄 习惯'},
     {id:'sleep',  label:'💤 睡眠'},
+    {id:'weight', label:'⚖️ 体重'},
     {id:'pomo',   label:'🍅 专注'},
     {id:'todo',   label:'✅ 任务'},
   ];
@@ -2176,6 +2210,27 @@ function renderMonthPanel(ym, type, el) {
     });
   }
 
+  else if (type === 'weight') {
+    const arc = DB.get('weight_arc', []).filter(x => x.date.startsWith(ym)).reverse();
+    if (!arc.length) { el.innerHTML = noData('本月无体重记录'); return; }
+    let prev = null;
+    arc.forEach(w => {
+      const cur = parseFloat(w.val);
+      let diff = '';
+      if (prev !== null) {
+        const delta = (cur - prev).toFixed(1);
+        diff = delta > 0 ? `<span style="color:var(--red);font-size:11px"> ▲+${delta}</span>`
+             : delta < 0 ? `<span style="color:var(--accent3);font-size:11px"> ▼${delta}</span>`
+             : `<span style="color:var(--ink4);font-size:11px"> —</span>`;
+      }
+      prev = cur;
+      const row = document.createElement('div');
+      row.className = 'arc-item';
+      row.innerHTML = `<span style="color:var(--ink3);font-size:11px">${w.date} ${dowLabel(w.date)}</span><span style="color:var(--ink2);font-size:15px;font-weight:600">${w.val} kg</span>${diff}`;
+      el.appendChild(row);
+    });
+  }
+
   else if (type === 'todo') {
     const done = [];
     for (let day = 1; day <= daysInMonth; day++) {
@@ -2297,6 +2352,45 @@ function dowLabel(dateStr) {
 }
 
 
+
+/* ============================================================
+   WEIGHT
+   ============================================================ */
+function loadWeight() {
+  const w = DB.get(`weight_${TODAY}`, '');
+  const inp = document.getElementById('weightInput');
+  if (inp) inp.value = w;
+  updateWeightDiff();
+}
+
+let weightTimer;
+function saveWeight() {
+  clearTimeout(weightTimer);
+  weightTimer = setTimeout(() => {
+    const val = document.getElementById('weightInput').value.trim();
+    if (!val) { DB.del(`weight_${TODAY}`); return; }
+    DB.set(`weight_${TODAY}`, val);
+    // archive
+    const arc = DB.get('weight_arc', []);
+    const idx = arc.findIndex(d => d.date === TODAY);
+    const entry = {date: TODAY, val};
+    if (idx >= 0) arc[idx] = entry; else arc.push(entry);
+    DB.set('weight_arc', arc);
+    updateWeightDiff();
+  }, 600);
+}
+
+function updateWeightDiff() {
+  const el = document.getElementById('weightDiff');
+  if (!el) return;
+  const today = parseFloat(DB.get(`weight_${TODAY}`, ''));
+  const yest  = parseFloat(DB.get(`weight_${yday()}`, ''));
+  if (!today || !yest) { el.textContent = ''; return; }
+  const diff = (today - yest).toFixed(1);
+  el.textContent = diff > 0 ? `▲ +${diff}` : diff < 0 ? `▼ ${diff}` : '— 持平';
+  el.style.color = diff > 0 ? 'var(--red)' : diff < 0 ? 'var(--accent3)' : 'var(--ink4)';
+}
+
 /* ============================================================
    RENDER ALL — called after cloud sync to refresh UI
    ============================================================ */
@@ -2308,6 +2402,7 @@ function renderAll() {
   renderMood();
   loadDiary();
   loadSleep();
+  loadWeight();
   renderPomoHistory();
 }
 
@@ -2341,6 +2436,7 @@ function init() {
   renderMood();
   loadDiary();
   loadSleep();
+  loadWeight();
   renderPomoHistory();
 
   // iPhone sleep quick access via URL hash
